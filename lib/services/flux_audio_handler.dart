@@ -240,6 +240,70 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _publishPlaybackState();
   }
 
+  void playNext(MediaItem item) {
+    final items = List<MediaItem>.of(queue.value);
+    final insertAt = items.isEmpty ? 0 : (_queueIndex + 1).clamp(0, items.length).toInt();
+    items.insert(insertAt, item);
+    queue.add(List<MediaItem>.unmodifiable(items));
+
+    final original = _unshuffledQueue;
+    if (original != null) {
+      final originalIndex = ((_unshuffledQueueIndex ?? _queueIndex) + 1)
+          .clamp(0, original.length)
+          .toInt();
+      original.insert(originalIndex, item);
+    }
+    _publishPlaybackState();
+  }
+
+  void addToQueue(MediaItem item) {
+    final items = List<MediaItem>.of(queue.value)..add(item);
+    queue.add(List<MediaItem>.unmodifiable(items));
+    _unshuffledQueue?.add(item);
+    _publishPlaybackState();
+  }
+
+  void removeQueueItemAt(int index) {
+    final items = List<MediaItem>.of(queue.value);
+    if (index < 0 || index >= items.length || index == _queueIndex) return;
+    final removed = items.removeAt(index);
+    if (index < _queueIndex) _queueIndex--;
+
+    final original = _unshuffledQueue;
+    if (original != null) {
+      final originalIndex = original.indexWhere((item) => identical(item, removed));
+      if (originalIndex >= 0) {
+        original.removeAt(originalIndex);
+        if (_unshuffledQueueIndex != null && originalIndex < _unshuffledQueueIndex!) {
+          _unshuffledQueueIndex = _unshuffledQueueIndex! - 1;
+        }
+      }
+    }
+    queue.add(List<MediaItem>.unmodifiable(items));
+    _publishPlaybackState();
+  }
+
+  void moveQueueItem(int oldIndex, int newIndex) {
+    final items = List<MediaItem>.of(queue.value);
+    if (oldIndex < 0 || oldIndex >= items.length) return;
+    if (newIndex > oldIndex) newIndex--;
+    if (newIndex < 0 || newIndex >= items.length || newIndex == oldIndex) return;
+    final current = _queueIndex >= 0 && _queueIndex < items.length
+        ? items[_queueIndex]
+        : mediaItem.value;
+    final moving = items.removeAt(oldIndex);
+    items.insert(newIndex, moving);
+    _shuffleEnabled = false;
+    _unshuffledQueue = null;
+    _unshuffledQueueIndex = null;
+    final currentIndex = current == null
+        ? -1
+        : items.indexWhere((item) => identical(item, current));
+    _queueIndex = currentIndex < 0 ? 0 : currentIndex;
+    queue.add(List<MediaItem>.unmodifiable(items));
+    _publishPlaybackState();
+  }
+
   Future<void> toggleRepeat() async {
     _repeatMode = switch (_repeatMode) {
       FluxRepeatMode.off => FluxRepeatMode.all,
