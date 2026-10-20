@@ -1636,7 +1636,9 @@ class _LyricsSheetState extends State<LyricsSheet> {
     String normalise(String value) => value
         .toLowerCase()
         .replaceAll(RegExp(r'\[[^\]]*\]|\([^)]*\)'), ' ')
-        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        // Keep non-Latin titles searchable; remove ASCII punctuation without stripping Unicode letters.
+        .replaceAll(RegExp(r'[\u0000-\u002F\u003A-\u0040\u005B-\u0060\u007B-\u007E]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
 
     Future<Object?> fetchJson(Uri uri) async {
@@ -1675,9 +1677,9 @@ class _LyricsSheetState extends State<LyricsSheet> {
         final rowTitle = normalise((row['trackName'] ?? row['name'] ?? row['track_name'] ?? '').toString());
         final rowArtist = normalise((row['artistName'] ?? row['artist_name'] ?? '').toString());
         var value = 0;
-        if (rowTitle == titleKey) {
+        if (titleKey.isNotEmpty && rowTitle.isNotEmpty && rowTitle == titleKey) {
           value += 100;
-        } else if (rowTitle.contains(titleKey) || titleKey.contains(rowTitle)) {
+        } else if (titleKey.isNotEmpty && rowTitle.isNotEmpty && (rowTitle.contains(titleKey) || titleKey.contains(rowTitle))) {
           value += 35;
         }
         if (artistKey.isNotEmpty && rowArtist == artistKey) {
