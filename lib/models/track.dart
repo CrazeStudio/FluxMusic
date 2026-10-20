@@ -40,6 +40,8 @@ class Track {
           return object.thumbnails;
         case 'thumbnail':
           return object.thumbnail;
+        case 'thumbnailUrl':
+          return object.thumbnailUrl;
         case 'url':
           return object.url;
         case 'duration':
