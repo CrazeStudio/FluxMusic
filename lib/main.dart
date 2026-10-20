@@ -98,7 +98,6 @@ class _MusicHomeState extends State<MusicHome> {
   final TextEditingController _searchController = TextEditingController();
 
   int _tab = 0;
-  bool _ready = false;
   bool _searching = false;
   String? _error;
   String _lastQuery = '';
@@ -130,11 +129,10 @@ class _MusicHomeState extends State<MusicHome> {
       final recentJson = prefs.getStringList('fluxmusic.recent.v1') ?? <String>[];
       _favorites = favJson.map(_decodeTrack).whereType<Track>().toList();
       _recent = recentJson.map(_decodeTrack).whereType<Track>().toList();
-      if (mounted) setState(() => _ready = true);
+      if (mounted) setState(() {});
     } catch (e) {
       if (mounted) {
         setState(() {
-          _ready = true;
           _error = 'Music catalogue could not connect. Check your internet and try again.';
         });
       }
@@ -169,6 +167,7 @@ class _MusicHomeState extends State<MusicHome> {
   Future<void> _search(String query) async {
     final clean = query.trim();
     if (clean.isEmpty) return;
+    _searchController.text = clean;
     FocusScope.of(context).unfocus();
     setState(() {
       _tab = 1;
