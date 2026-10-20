@@ -15,7 +15,7 @@ late final FluxAudioHandler fluxAudio;
 
 const _ink = Color(0xFF080B16);
 const _panel = Color(0xFF13182A);
-const _mint = Color(0xFFB9F65A);
+const _mint = Color(0xFF62E6B6);
 const _violet = Color(0xFF9A7BFF);
 const _muted = Color(0xFF9DA5BC);
 
@@ -343,11 +343,23 @@ class _MusicHomeState extends State<MusicHome> {
       padding: const EdgeInsets.fromLTRB(20, 12, 18, 14),
       child: Row(
         children: <Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              width: 46,
-              height: 46,
+          Container(
+            width: 48,
+            height: 48,
+            padding: const EdgeInsets.all(1),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: <Color>[_mint.withValues(alpha: .9), _violet.withValues(alpha: .65)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: <BoxShadow>[
+                BoxShadow(color: _mint.withValues(alpha: .09), blurRadius: 18, offset: const Offset(0, 5)),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
               child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.cover),
             ),
           ),
@@ -356,16 +368,34 @@ class _MusicHomeState extends State<MusicHome> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text('FluxMusic', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -.7)),
+                Text('FluxMusic', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -.8)),
                 SizedBox(height: 3),
-                Text('YOUR DAILY SOUNDTRACK', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _muted, letterSpacing: 1.55)),
+                Row(
+                  children: <Widget>[
+                    Icon(Icons.graphic_eq_rounded, size: 12, color: _mint),
+                    SizedBox(width: 5),
+                    Text('MUSIC FOR YOUR MOMENT', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _muted, letterSpacing: 1.15)),
+                  ],
+                ),
               ],
             ),
           ),
-          IconButton(
-            tooltip: 'Search music',
-            onPressed: () => setState(() => _tab = 1),
-            icon: const Icon(Icons.search_rounded, color: Colors.white, size: 25),
+          Material(
+            color: Colors.white.withValues(alpha: .055),
+            borderRadius: BorderRadius.circular(15),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(15),
+              onTap: () => setState(() => _tab = 1),
+              child: Container(
+                width: 45,
+                height: 45,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: Colors.white.withValues(alpha: .075)),
+                ),
+                child: const Icon(Icons.search_rounded, color: Colors.white, size: 23),
+              ),
+            ),
           ),
         ],
       ),
@@ -374,141 +404,173 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _discover() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 26),
       children: <Widget>[
-        const Text('YOUR SOUND,', style: TextStyle(fontSize: 11, color: _mint, fontWeight: FontWeight.w800, letterSpacing: 3)),
-        const SizedBox(height: 4),
-        const Text('your universe.', style: TextStyle(fontSize: 34, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -1.6)),
-        const SizedBox(height: 10),
-        const Text('Discover tracks for every version of you.', style: TextStyle(color: _muted, fontSize: 14)),
-        const SizedBox(height: 22),
-        _searchBox(
-          hint: 'Songs, artists, albums...',
-          onSubmitted: _search,
-        ),
-        const SizedBox(height: 22),
-        _featureCard(),
-        const SizedBox(height: 27),
         Row(
           children: <Widget>[
-            const Expanded(child: Text('Pick a vibe', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800))),
-            Text('EXPLORE', style: TextStyle(fontSize: 10, color: _mint.withValues(alpha: .9), letterSpacing: 1.6, fontWeight: FontWeight.w800)),
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: _mint,
+                shape: BoxShape.circle,
+                boxShadow: <BoxShadow>[BoxShadow(color: _mint.withValues(alpha: .55), blurRadius: 9)],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Text('YOUR PERSONAL SOUNDTRACK', style: TextStyle(fontSize: 9, color: _mint, fontWeight: FontWeight.w900, letterSpacing: 1.7)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .045),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: .07)),
+              ),
+              child: const Text('DISCOVER', style: TextStyle(fontSize: 8, color: _muted, fontWeight: FontWeight.w800, letterSpacing: 1.1)),
+            ),
           ],
         ),
         const SizedBox(height: 13),
-        Wrap(
-          spacing: 9,
-          runSpacing: 9,
-          children: _moods.asMap().entries.map((entry) {
-            final index = entry.key;
-            final mood = entry.value;
-            final colors = <Color>[_mint, _violet, const Color(0xFFFFA36C), const Color(0xFF64D7E7)];
-            return ActionChip(
-              onPressed: () => _search(mood == 'Trending now' ? 'trending music 2026' : mood),
-              backgroundColor: Colors.white.withValues(alpha: .045),
-              side: BorderSide(color: colors[index % colors.length].withValues(alpha: .34)),
-              avatar: Icon(
-                <IconData>[
-                  Icons.local_fire_department_rounded,
-                  Icons.bolt_rounded,
-                  Icons.spa_rounded,
-                  Icons.headphones_rounded,
-                  Icons.mic_external_on_rounded,
-                  Icons.nightlight_round,
-                ][index],
-                size: 16,
-                color: colors[index % colors.length],
-              ),
-              label: Text(mood, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
-            );
-          }).toList(),
+        const Text(
+          'Find your\nfrequency.',
+          style: TextStyle(fontSize: 38, height: 1.03, fontWeight: FontWeight.w900, letterSpacing: -1.8),
+        ),
+        const SizedBox(height: 10),
+        const Text('The right sound can change the whole moment.', style: TextStyle(color: _muted, fontSize: 13, height: 1.45)),
+        const SizedBox(height: 21),
+        _searchBox(hint: 'Songs, artists, albums...', onSubmitted: _search),
+        const SizedBox(height: 20),
+        _featureCard(),
+        const SizedBox(height: 28),
+        _sectionHeading('Made for your mood', 'QUICK PICKS'),
+        const SizedBox(height: 13),
+        SizedBox(
+          height: 126,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _moods.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (_, index) => _moodCard(_moods[index], index),
+          ),
         ),
         const SizedBox(height: 28),
         if (_recent.isNotEmpty) ...<Widget>[
-          _sectionHeading('Recently played', 'PICK UP THE VIBE'),
-          const SizedBox(height: 10),
-          ..._recent.take(4).toList().asMap().entries.map(
-                (entry) => _trackTile(entry.value, entry.key, _recent, compact: true),
-              ),
+          _sectionHeading('Pick up where you left off', 'YOUR RECENT'),
+          const SizedBox(height: 13),
+          SizedBox(
+            height: 164,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _recent.take(8).length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (_, index) => _recentCard(_recent[index], index),
+            ),
+          ),
         ] else ...<Widget>[
           const _EmptyState(
             icon: Icons.surround_sound_rounded,
             title: 'Your next favourite is out there',
-            subtitle: 'Search for a song or pick a vibe to start your own soundtrack.',
+            subtitle: 'Search for a song or pick a mood to start your soundtrack.',
           ),
         ],
+        const SizedBox(height: 10),
       ],
     );
   }
 
   Widget _featureCard() {
     return Container(
-      height: 222,
+      height: 228,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(27),
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF202840), Color(0xFF17152B), Color(0xFF102626)],
+          colors: <Color>[Color(0xFF183A37), Color(0xFF172B32), Color(0xFF211D38)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         border: Border.all(color: Colors.white.withValues(alpha: .09)),
         boxShadow: <BoxShadow>[
-          BoxShadow(color: _violet.withValues(alpha: .08), blurRadius: 28, offset: const Offset(0, 12)),
+          BoxShadow(color: _mint.withValues(alpha: .075), blurRadius: 30, offset: const Offset(0, 13)),
         ],
       ),
       child: Stack(
         children: <Widget>[
           Positioned(
-            right: -30,
-            bottom: -37,
+            right: -44,
+            bottom: -52,
+            child: Container(
+              width: 242,
+              height: 242,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: <Color>[_mint.withValues(alpha: .2), _violet.withValues(alpha: .07), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: -21,
+            bottom: -29,
             child: Opacity(
-              opacity: .92,
+              opacity: .83,
               child: SvgPicture.asset(
                 'assets/brand/fluxmusic_foreground.svg',
-                width: 255,
-                height: 255,
+                width: 220,
+                height: 220,
                 fit: BoxFit.contain,
               ),
             ),
           ),
           Positioned(
-            right: 18,
-            top: 18,
+            right: 16,
+            top: 16,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: .25),
+                color: Colors.black.withValues(alpha: .22),
                 borderRadius: BorderRadius.circular(30),
                 border: Border.all(color: Colors.white.withValues(alpha: .12)),
               ),
-              child: const Text('CURATED FOR YOU', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.4, color: Colors.white)),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.auto_awesome_rounded, color: _mint, size: 11),
+                  SizedBox(width: 5),
+                  Text('FLUX SELECTS', style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.15, color: Colors.white)),
+                ],
+              ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 21, 145, 18),
+            padding: const EdgeInsets.fromLTRB(19, 20, 126, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                const Text('FLUX SELECTS', style: TextStyle(color: _mint, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 2.1)),
+                Container(
+                  width: 36,
+                  height: 3,
+                  decoration: BoxDecoration(color: _mint, borderRadius: BorderRadius.circular(10)),
+                ),
                 const Spacer(),
                 const Text(
-                  'Press play.\nFeel everything.',
-                  style: TextStyle(fontSize: 25, height: 1.07, fontWeight: FontWeight.w900, letterSpacing: -1),
+                  'Your next\nobsession.',
+                  style: TextStyle(fontSize: 27, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -1.1),
                 ),
                 const SizedBox(height: 8),
-                const Text('Find the track that fits your moment.', style: TextStyle(color: Color(0xFFB5BCD0), fontSize: 11, height: 1.35)),
+                const Text('Fresh sounds for wherever life takes you.', style: TextStyle(color: Color(0xFFB5C7CB), fontSize: 11, height: 1.35)),
                 const Spacer(),
                 FilledButton.icon(
                   onPressed: () => _search('new music mix'),
                   style: FilledButton.styleFrom(
                     backgroundColor: _mint,
-                    foregroundColor: _ink,
-                    minimumSize: const Size(0, 42),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
+                    foregroundColor: const Color(0xFF07140F),
+                    minimumSize: const Size(0, 39),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10.5),
                   ),
                   icon: const Icon(Icons.play_arrow_rounded, size: 18),
                   label: const Text('Explore music'),
@@ -517,6 +579,125 @@ class _MusicHomeState extends State<MusicHome> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _moodCard(String mood, int index) {
+    const palettes = <List<Color>>[
+      <Color>[Color(0xFF25453B), Color(0xFF142823)],
+      <Color>[Color(0xFF3C2858), Color(0xFF211731)],
+      <Color>[Color(0xFF493326), Color(0xFF282018)],
+      <Color>[Color(0xFF1E3D50), Color(0xFF142833)],
+      <Color>[Color(0xFF493044), Color(0xFF281C2C)],
+      <Color>[Color(0xFF283452), Color(0xFF171F35)],
+    ];
+    const icons = <IconData>[
+      Icons.local_fire_department_rounded,
+      Icons.bolt_rounded,
+      Icons.spa_rounded,
+      Icons.headphones_rounded,
+      Icons.mic_external_on_rounded,
+      Icons.nightlight_round,
+    ];
+    final colors = palettes[index % palettes.length];
+    return SizedBox(
+      width: 154,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _search(mood == 'Trending now' ? 'trending music 2026' : mood),
+          child: Ink(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: .075)),
+            ),
+            child: Stack(
+              children: <Widget>[
+                Positioned(
+                  right: -22,
+                  top: -26,
+                  child: Icon(icons[index % icons.length], size: 95, color: Colors.white.withValues(alpha: .055)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(13),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .09),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(icons[index % icons.length], color: index == 0 ? _mint : const Color(0xFFE0D3FF), size: 19),
+                      ),
+                      const Spacer(),
+                      Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: <Widget>[
+                          const Text('PLAY MIX', style: TextStyle(fontSize: 8, color: Color(0xFFB8BDCB), fontWeight: FontWeight.w800, letterSpacing: 1.05)),
+                          const Spacer(),
+                          Icon(Icons.arrow_outward_rounded, color: Colors.white.withValues(alpha: .8), size: 13),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _recentCard(Track track, int index) {
+    return SizedBox(
+      width: 128,
+      child: Material(
+        color: Colors.white.withValues(alpha: .035),
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _playList(_recent, index),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: Colors.white.withValues(alpha: .065)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Stack(
+                  children: <Widget>[
+                    _CoverArt(url: track.thumbnailUrl, size: 83, radius: 13),
+                    Positioned(
+                      right: 5,
+                      bottom: 5,
+                      child: Container(
+                        width: 27,
+                        height: 27,
+                        decoration: const BoxDecoration(color: _mint, shape: BoxShape.circle),
+                        child: const Icon(Icons.play_arrow_rounded, color: _ink, size: 19),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 9),
+                Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5)),
+                const SizedBox(height: 3),
+                Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -712,43 +893,85 @@ class _MusicHomeState extends State<MusicHome> {
         final item = snapshot.data;
         if (item == null) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 5, 12, 9),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
           child: Material(
-            color: const Color(0xFF1C2234),
-            borderRadius: BorderRadius.circular(17),
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(19),
             child: InkWell(
-              borderRadius: BorderRadius.circular(17),
+              borderRadius: BorderRadius.circular(19),
               onTap: _openPlayer,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(17), border: Border.all(color: Colors.white.withValues(alpha: .08))),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(9, 8, 9, 7),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: <Color>[Color(0xFF1C2A2A), Color(0xFF171E2C), Color(0xFF1C1B2C)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(19),
+                  border: Border.all(color: _mint.withValues(alpha: .19)),
+                  boxShadow: <BoxShadow>[BoxShadow(color: Colors.black.withValues(alpha: .16), blurRadius: 18, offset: const Offset(0, 6))],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    _CoverArt(url: item.extras?['thumbnailUrl'] as String? ?? '', size: 43, radius: 10),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 3),
-                          Text(item.artist ?? 'Unknown artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10.5)),
-                        ],
+                    Row(
+                      children: <Widget>[
+                        _CoverArt(url: item.extras?['thumbnailUrl'] as String? ?? '', size: 44, radius: 11),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 3),
+                              Text(item.artist ?? 'Unknown artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10.5)),
+                            ],
+                          ),
+                        ),
+                        StreamBuilder<PlaybackState>(
+                          stream: fluxAudio.playbackState,
+                          builder: (context, stateSnapshot) {
+                            final playing = stateSnapshot.data?.playing ?? false;
+                            return IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => playing ? fluxAudio.pause() : fluxAudio.play(),
+                              icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: _mint, size: 28),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => fluxAudio.skipToNext(),
+                          icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 25),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: StreamBuilder<Duration>(
+                        stream: fluxAudio.positionStream,
+                        initialData: Duration.zero,
+                        builder: (context, positionSnapshot) {
+                          return StreamBuilder<Duration?>(
+                            stream: fluxAudio.durationStream,
+                            builder: (context, durationSnapshot) {
+                              final position = positionSnapshot.data ?? Duration.zero;
+                              final duration = durationSnapshot.data ?? Duration.zero;
+                              final progress = duration.inMilliseconds > 0
+                                  ? (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble()
+                                  : 0.0;
+                              return LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 2,
+                                backgroundColor: Colors.white.withValues(alpha: .09),
+                                valueColor: const AlwaysStoppedAnimation<Color>(_mint),
+                              );
+                            },
+                          );
+                        },
                       ),
-                    ),
-                    StreamBuilder<PlaybackState>(
-                      stream: fluxAudio.playbackState,
-                      builder: (context, stateSnapshot) {
-                        final playing = stateSnapshot.data?.playing ?? false;
-                        return IconButton(
-                          onPressed: () => playing ? fluxAudio.pause() : fluxAudio.play(),
-                          icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: _mint, size: 29),
-                        );
-                      },
-                    ),
-                    IconButton(
-                      onPressed: () => fluxAudio.skipToNext(),
-                      icon: const Icon(Icons.skip_next_rounded, color: Colors.white, size: 25),
                     ),
                   ],
                 ),
