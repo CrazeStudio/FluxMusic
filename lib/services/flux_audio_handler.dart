@@ -264,7 +264,8 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _publishPlaybackState();
   }
 
-  void removeQueueItemAt(int index) {
+  @override
+  Future<void> removeQueueItemAt(int index) async {
     final items = List<MediaItem>.of(queue.value);
     if (index < 0 || index >= items.length || index == _queueIndex) return;
     final removed = items.removeAt(index);
