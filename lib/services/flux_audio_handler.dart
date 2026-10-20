@@ -151,19 +151,29 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     ));
 
     Object? lastError;
-    final strategies = <List<YoutubeApiClient>?>[
-      null,
-      <YoutubeApiClient>[YoutubeApiClient.safari, YoutubeApiClient.androidVr],
-      <YoutubeApiClient>[YoutubeApiClient.ios],
+    // Keep each manifest tied to the matching media client. YouTube can reject
+    // a resolved URL when the playback User-Agent differs from the resolver.
+    final strategies = <({YoutubeApiClient client, String userAgent})>[
+      (
+        client: YoutubeApiClient.androidSdkless,
+        userAgent: 'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
+      ),
+      (
+        client: YoutubeApiClient.androidMusic,
+        userAgent: 'com.google.android.youtube/19.29.1 (Linux; U; Android 11) gzip',
+      ),
+      (
+        client: YoutubeApiClient.ios,
+        userAgent: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
+      ),
     ];
 
-    for (final clients in strategies) {
+    for (final strategy in strategies) {
       if (generation != _loadGeneration) return;
       try {
-        final manifestFuture = clients == null
-            ? _youtube.videos.streams.getManifest(videoId)
-            : _youtube.videos.streams.getManifest(videoId, ytClients: clients);
-        final manifest = await manifestFuture.timeout(const Duration(seconds: 15));
+        final manifest = await _youtube.videos.streams
+            .getManifest(videoId, ytClients: <YoutubeApiClient>[strategy.client])
+            .timeout(const Duration(seconds: 15));
         final candidates = manifest.audioOnly.toList()
           ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
         if (candidates.isEmpty) {
@@ -177,9 +187,8 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
             await _player.setAudioSource(
               AudioSource.uri(
                 stream.url,
-                headers: const <String, String>{
-                  'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-                  'Referer': 'https://www.youtube.com/',
+                headers: <String, String>{
+                  'User-Agent': strategy.userAgent,
                 },
                 tag: item,
               ),
