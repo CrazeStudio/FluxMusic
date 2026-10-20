@@ -22,22 +22,33 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android platform files
-        run: flutter create . --platforms=android --org=dev.crazestudio --project-name=fluxmusic --no-pub
+      - name: Generate clean Android project scaffold
+        run: flutter create "${RUNNER_TEMP}/fluxmusic-build" --platforms=android --org=dev.crazestudio --project-name=fluxmusic --no-pub
 
-      - name: Configure internet permission and media notification service
-        run: python3 tool/patch_android.py
+      - name: Overlay FluxMusic source
+        run: |
+          cp pubspec.yaml "${RUNNER_TEMP}/fluxmusic-build/pubspec.yaml"
+          rm -rf "${RUNNER_TEMP}/fluxmusic-build/lib"
+          cp -R lib "${RUNNER_TEMP}/fluxmusic-build/lib"
+          cp -R tool "${RUNNER_TEMP}/fluxmusic-build/tool"
+          cd "${RUNNER_TEMP}/fluxmusic-build"
+          python3 tool/patch_android.py
 
       - name: Resolve packages
+        working-directory: ${{ runner.temp }}/fluxmusic-build
         run: flutter pub get
 
       - name: Build release APK
+        working-directory: ${{ runner.temp }}/fluxmusic-build
         run: flutter build apk --release
+
+      - name: Copy APK into workflow workspace
+        run: cp "${RUNNER_TEMP}/fluxmusic-build/build/app/outputs/flutter-apk/app-release.apk" fluxmusic-release.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: fluxmusic-android-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: fluxmusic-release.apk
           if-no-files-found: error
           retention-days: 14
