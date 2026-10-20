@@ -886,9 +886,9 @@ class _MusicHomeState extends State<MusicHome> {
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
               const Text('YOUR COLLECTION', style: TextStyle(color: _muted, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
               const Spacer(),
-              Text(showingRecent ? 'Recently played' : 'Liked songs', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.4)),
+              Text(showingRecent ? 'Recently played' : 'Liked songs', style: const TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.4)),
               const SizedBox(height: 3),
-              Text('${visibleTracks.length} tracks', style: const TextStyle(color: Color(0xFFE3DEFF), fontSize: 11)),
+              Text('${visibleTracks.length} tracks', style: const TextStyle(color: _muted, fontSize: 11)),
             ]),
             Positioned(right: 5, bottom: 2, child: Material(
               color: _mint, shape: const CircleBorder(),
@@ -1102,7 +1102,13 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => Theme(
+    data: ThemeData.dark(useMaterial3: true).copyWith(
+  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF090B10)),
+  textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF343A4D)),
+),
+    child: Container(
     padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
     decoration: const BoxDecoration(color: Color(0xFF101526), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
     child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
@@ -1129,7 +1135,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       const SizedBox(height: 12),
       const Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF737C96), fontSize: 10)),
     ]),
-  );
+  ));
 
   Widget _tile(IconData icon, String title, String subtitle, bool value, ValueChanged<bool> onChanged) => Container(
     padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
@@ -1178,7 +1184,13 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
           builder: (context, playbackSnapshot) {
             final playback = playbackSnapshot.data;
             final playing = playback?.playing ?? false;
-            return Container(
+            return Theme(
+              data: ThemeData.dark(useMaterial3: true).copyWith(
+  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF090B10)),
+  textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF343A4D)),
+),
+              child: Container(
               height: MediaQuery.sizeOf(context).height * .96,
               padding: const EdgeInsets.fromLTRB(20, 9, 20, 18),
               decoration: const BoxDecoration(color: Color(0xFF090B10), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
@@ -1323,7 +1335,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   ),
                 ),
               ]),
-            );
+            ));
           },
         );
       },
@@ -1517,7 +1529,13 @@ class _LyricsSheetState extends State<LyricsSheet> {
   }
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Theme(
+      data: ThemeData.dark(useMaterial3: true).copyWith(
+  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF090B10)),
+  textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
+  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF343A4D)),
+),
+      child: Container(
       height: MediaQuery.sizeOf(context).height * .78,
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
       decoration: const BoxDecoration(
@@ -1587,7 +1605,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 
