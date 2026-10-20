@@ -229,16 +229,19 @@ class _MusicHomeState extends State<MusicHome> {
   }
 
   Future<void> _playList(List<Track> tracks, int index) async {
-    if (tracks.isEmpty) return;
+    if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+
+    // Keep stream/playback errors separate from history persistence errors.
+    // A preferences failure must not be reported as a failed audio stream.
     try {
       await fluxAudio.playTracks(
         tracks.map((track) => track.toMediaItem()).toList(),
         startIndex: index,
       );
-      await _remember(tracks[index]);
     } catch (e) {
       if (!mounted) return;
-      final message = fluxAudio.lastPlaybackError ?? 'Could not start this track: $e';
+      final message = fluxAudio.lastPlaybackError ??
+          'Could not start this track: $e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
@@ -248,6 +251,20 @@ class _MusicHomeState extends State<MusicHome> {
             label: 'RETRY',
             onPressed: () => _playList(tracks, index),
           ),
+        ),
+      );
+      return;
+    }
+
+    try {
+      await _remember(tracks[index]);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Track started, but listening history could not be saved.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
         ),
       );
     }
