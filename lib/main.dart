@@ -35,7 +35,7 @@ Future<void> main() async {
       androidNotificationChannelId: 'dev.crazestudio.fluxmusic.playback',
       androidNotificationChannelName: 'FluxMusic playback',
       androidNotificationChannelDescription: 'Music playback controls',
-      androidNotificationOngoing: false,
+      androidNotificationOngoing: true,
       androidStopForegroundOnPause: true,
     ),
   );
