@@ -82,7 +82,7 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
     if 'dev.crazestudio.fluxmusic/audio_effects' not in source:
         source = source.replace(
             'import com.ryanheise.audioservice.AudioServiceActivity',
-            'import com.ryanheise.audioservice.AudioServiceActivity\nimport android.media.audiofx.DynamicsProcessing\nimport android.media.audiofx.LoudnessEnhancer\nimport io.flutter.embedding.engine.FlutterEngine\nimport io.flutter.plugin.common.MethodChannel',
+            'import com.ryanheise.audioservice.AudioServiceActivity\nimport android.media.audiofx.DynamicsProcessing\nimport android.media.audiofx.LoudnessEnhancer\nimport android.media.audiofx.BassBoost\nimport io.flutter.embedding.engine.FlutterEngine\nimport io.flutter.plugin.common.MethodChannel',
         )
         source = source.replace(
             'class MainActivity : AudioServiceActivity()',
@@ -99,7 +99,7 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, effectChannel).setMethodCallHandler { call, result ->
             when (call.method) {
-                "getSettings" -> result.success(mapOf("normalization" to normalizationEnabled, "limiter" to limiterEnabled, "drc" to drcEnabled))
+                "getSettings" -> result.success(mapOf("normalization" to normalizationEnabled, "limiter" to limiterEnabled, "drc" to drcEnabled, "bassBoost" to bassBoostEnabled))
                 "attachSession" -> {
                     effectSessionId = call.argument<Int>("sessionId") ?: 0
                     applyAudioEffects()
@@ -123,6 +123,12 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
             loudnessEnhancer?.release()
             loudnessEnhancer = if (normalizationEnabled) LoudnessEnhancer(effectSessionId).apply {
                 setTargetGain(0)
+                enabled = true
+            } else null
+
+            bassBoost?.release()
+            bassBoost = if (bassBoostEnabled) BassBoost(0, effectSessionId).apply {
+                setStrength(650.toShort())
                 enabled = true
             } else null
 
