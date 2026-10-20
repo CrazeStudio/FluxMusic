@@ -86,7 +86,7 @@ class FluxMusicApp extends StatelessWidget {
       ),
       snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
     );
-    return MaterialApp(    return MaterialApp(
+    return MaterialApp(
       title: 'FluxMusic',
       debugShowCheckedModeBanner: false,
       theme: base,
