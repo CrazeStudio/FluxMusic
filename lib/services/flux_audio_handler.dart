@@ -5,8 +5,9 @@ import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
-/// Owns playback independently of the Flutter screen, so audio and media
-/// controls keep working when the UI is backgrounded or the screen is locked.
+/// Background audio service. Stream resolution is unofficial and may break
+/// when YouTube changes its delivery mechanisms, so the handler tries more
+/// than one supported client and keeps a readable error for the UI.
 class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   final YoutubeExplode _youtube = YoutubeExplode();
@@ -15,19 +16,15 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   int _loadGeneration = 0;
   bool _shuffleEnabled = false;
   List<MediaItem>? _unshuffledQueue;
+  String? _lastPlaybackError;
 
   bool get shuffleEnabled => _shuffleEnabled;
+  String? get lastPlaybackError => _lastPlaybackError;
 
   FluxAudioHandler() {
     _player.playbackEventStream.listen(
       (_) => _publishPlaybackState(),
-      onError: (Object error, StackTrace stackTrace) {
-        playbackState.add(playbackState.value.copyWith(
-          playing: false,
-          processingState: AudioProcessingState.error,
-          errorMessage: error.toString(),
-        ));
-      },
+      onError: (Object error, StackTrace stackTrace) => _setError(error),
     );
     _player.playingStream.listen((_) => _publishPlaybackState());
     _player.processingStateStream.listen((state) {
@@ -41,15 +38,47 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Stream<Duration> get positionStream => _player.positionStream;
   Stream<Duration?> get durationStream => _player.durationStream;
 
+  String _describeError(Object error) {
+    final text = error.toString();
+    final lower = text.toLowerCase();
+    if (lower.contains('403') || lower.contains('forbidden')) {
+      return 'YouTube refused this audio stream. Try another version of the song or retry later.';
+    }
+    if (lower.contains('429') || lower.contains('rate limit')) {
+      return 'YouTube is temporarily rate-limiting requests. Wait a little, then retry.';
+    }
+    if (lower.contains('video unavailable') || lower.contains('unplayable')) {
+      return 'This video is unavailable for direct playback. Try another search result.';
+    }
+    if (lower.contains('socketexception') ||
+        lower.contains('network is unreachable') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('timed out')) {
+      return 'The stream could not connect. Check your internet connection and retry.';
+    }
+    final firstLine = text.split('\n').first.replaceAll(RegExp(r'https?://\S+'), '[stream URL]');
+    final concise = firstLine.length > 150 ? '${firstLine.substring(0, 147)}…' : firstLine;
+    return 'Could not load audio: $concise';
+  }
+
+  void _setError(Object error) {
+    _lastPlaybackError = _describeError(error);
+    playbackState.add(playbackState.value.copyWith(
+      playing: false,
+      processingState: AudioProcessingState.error,
+      errorMessage: _lastPlaybackError,
+    ));
+  }
+
   void _publishPlaybackState() {
-    final processing = switch (_player.processingState) {
+    final playerProcessing = switch (_player.processingState) {
       ProcessingState.idle => AudioProcessingState.idle,
       ProcessingState.loading => AudioProcessingState.loading,
       ProcessingState.buffering => AudioProcessingState.buffering,
       ProcessingState.ready => AudioProcessingState.ready,
       ProcessingState.completed => AudioProcessingState.completed,
     };
-
+    final processing = _lastPlaybackError == null ? playerProcessing : AudioProcessingState.error;
     playbackState.add(PlaybackState(
       controls: <MediaControl>[
         MediaControl.skipToPrevious,
@@ -60,19 +89,16 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       androidCompactActionIndices: const <int>[0, 1, 2],
       systemActions: const <MediaAction>{MediaAction.seek},
       processingState: processing,
-      playing: _player.playing,
+      playing: _lastPlaybackError == null && _player.playing,
       updatePosition: _player.position,
       bufferedPosition: _player.bufferedPosition,
       speed: _player.speed,
       queueIndex: _queueIndex,
+      errorMessage: _lastPlaybackError,
     ));
   }
 
-  /// Replaces the visible queue and starts at the requested item.
-  Future<void> playTracks(
-    List<MediaItem> items, {
-    int startIndex = 0,
-  }) async {
+  Future<void> playTracks(List<MediaItem> items, {int startIndex = 0}) async {
     if (items.isEmpty) return;
     queue.add(List<MediaItem>.unmodifiable(items));
     _shuffleEnabled = false;
@@ -81,13 +107,10 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     await skipToQueueItem(safeIndex);
   }
 
-  /// Shuffles the queue while keeping the current item playing. Turning shuffle
-  /// off restores the order that was active when shuffle was enabled.
   Future<void> toggleShuffle() async {
     final current = mediaItem.value;
     final currentQueue = queue.value;
     if (current == null || currentQueue.length < 2) return;
-
     if (!_shuffleEnabled) {
       _unshuffledQueue = List<MediaItem>.of(currentQueue);
       final shuffled = List<MediaItem>.of(currentQueue)
@@ -114,53 +137,97 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final generation = ++_loadGeneration;
     final videoId = (item.extras?['videoId'] as String?) ?? item.id;
     if (videoId.trim().isEmpty) {
-      throw StateError('This track does not have a playable video ID.');
+      const message = 'This result has no YouTube video ID. Try another search result.';
+      _lastPlaybackError = message;
+      throw StateError(message);
     }
 
+    _lastPlaybackError = null;
     mediaItem.add(item);
     playbackState.add(playbackState.value.copyWith(
       processingState: AudioProcessingState.loading,
       playing: false,
+      errorMessage: null,
     ));
 
-    try {
-      final manifest = await _youtube.videos.streams.getManifest(
-        videoId,
-        ytClients: <YoutubeApiClient>[
-          YoutubeApiClient.ios,
-          YoutubeApiClient.androidVr,
-        ],
-      );
-      final streams = manifest.audioOnly.toList()
-        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
-      if (streams.isEmpty) {
-        throw StateError('No audio stream was offered for this track.');
-      }
-      if (generation != _loadGeneration) return;
+    Object? lastError;
+    final strategies = <List<YoutubeApiClient>?>[
+      null,
+      <YoutubeApiClient>[YoutubeApiClient.safari, YoutubeApiClient.androidVr],
+      <YoutubeApiClient>[YoutubeApiClient.ios],
+    ];
 
-      await _player.setAudioSource(
-        AudioSource.uri(
-          streams.first.url,
-          tag: item,
-        ),
-      );
+    for (final clients in strategies) {
       if (generation != _loadGeneration) return;
-      // AudioPlayer.play() completes when playback ends; don't keep the queue
-      // change request waiting for the entire song to finish.
-      unawaited(play());
-    } catch (_) {
-      if (generation == _loadGeneration) {
-        playbackState.add(playbackState.value.copyWith(
-          playing: false,
-          processingState: AudioProcessingState.error,
-        ));
+      try {
+        final manifestFuture = clients == null
+            ? _youtube.videos.streams.getManifest(videoId)
+            : _youtube.videos.streams.getManifest(videoId, ytClients: clients);
+        final manifest = await manifestFuture.timeout(const Duration(seconds: 15));
+        final candidates = manifest.audioOnly.toList()
+          ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+        if (candidates.isEmpty) {
+          lastError = StateError('No audio-only streams were returned for this client.');
+          continue;
+        }
+
+        for (final stream in candidates.take(4)) {
+          if (generation != _loadGeneration) return;
+          try {
+            await _player.setAudioSource(
+              AudioSource.uri(
+                stream.url,
+                headers: const <String, String>{
+                  'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+                  'Referer': 'https://www.youtube.com/',
+                },
+                tag: item,
+              ),
+            ).timeout(const Duration(seconds: 18));
+            if (generation != _loadGeneration) return;
+            _lastPlaybackError = null;
+            _publishPlaybackState();
+            unawaited(_playSafely(generation));
+            return;
+          } catch (error) {
+            lastError = error;
+            await _player.stop();
+          }
+        }
+      } catch (error) {
+        lastError = error;
       }
-      rethrow;
+    }
+
+    if (generation == _loadGeneration) {
+      _lastPlaybackError = _describeError(lastError ?? StateError('No playable stream was returned.'));
+      playbackState.add(playbackState.value.copyWith(
+        playing: false,
+        processingState: AudioProcessingState.error,
+        errorMessage: _lastPlaybackError,
+      ));
+      throw StateError(_lastPlaybackError!);
+    }
+  }
+
+  Future<void> _playSafely(int generation) async {
+    try {
+      await _player.play();
+    } catch (error) {
+      if (generation == _loadGeneration) _setError(error);
     }
   }
 
   @override
-  Future<void> play() async => _player.play();
+  Future<void> play() async {
+    if (_lastPlaybackError != null) return;
+    try {
+      await _player.play();
+    } catch (error) {
+      _setError(error);
+      rethrow;
+    }
+  }
 
   @override
   Future<void> pause() => _player.pause();
@@ -198,12 +265,12 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> stop() async {
     ++_loadGeneration;
+    _lastPlaybackError = null;
     await _player.stop();
     mediaItem.add(null);
     await super.stop();
   }
 
-  /// Called by Flutter's lifecycle only when the service is genuinely done.
   Future<void> disposePlayer() async {
     ++_loadGeneration;
     _youtube.close();

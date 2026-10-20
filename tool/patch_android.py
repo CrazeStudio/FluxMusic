@@ -7,6 +7,20 @@ if not manifest_path.exists():
 
 text = manifest_path.read_text(encoding="utf-8")
 
+# Use a friendly app name and the custom launcher resource in the generated manifest.
+app_match = re.search(r'<application\\b[^>]*>', text, re.S)
+if app_match:
+    app_tag = app_match.group(0)
+    if re.search(r'android:label="[^"]*"', app_tag):
+        app_tag = re.sub(r'android:label="[^"]*"', 'android:label="FluxMusic"', app_tag, count=1)
+    else:
+        app_tag = app_tag[:-1] + ' android:label="FluxMusic">'
+    if re.search(r'android:icon="[^"]*"', app_tag):
+        app_tag = re.sub(r'android:icon="[^"]*"', 'android:icon="@mipmap/ic_launcher"', app_tag, count=1)
+    else:
+        app_tag = app_tag[:-1] + ' android:icon="@mipmap/ic_launcher">'
+    text = text[:app_match.start()] + app_tag + text[app_match.end():]
+
 if 'xmlns:tools=' not in text:
     text = re.sub(
         r'<manifest\s+',
@@ -67,4 +81,4 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
     source = source.replace('MainActivity : FlutterActivity()', 'MainActivity : AudioServiceActivity()')
     main_activity.write_text(source, encoding="utf-8")
 
-print("Patched Android internet access, notification permission, and audio_service media playback.")
+print("Patched Android label/icon, internet access, notification permission, and audio_service media playback.")

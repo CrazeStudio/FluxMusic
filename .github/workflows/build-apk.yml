@@ -31,8 +31,16 @@ jobs:
           rm -rf "${RUNNER_TEMP}/fluxmusic-build/lib"
           cp -R lib "${RUNNER_TEMP}/fluxmusic-build/lib"
           cp -R tool "${RUNNER_TEMP}/fluxmusic-build/tool"
+          cp -R assets "${RUNNER_TEMP}/fluxmusic-build/assets"
           cd "${RUNNER_TEMP}/fluxmusic-build"
           python3 tool/patch_android.py
+
+      - name: Generate launcher icon assets
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y librsvg2-bin
+          cd "${RUNNER_TEMP}/fluxmusic-build"
+          python3 tool/prepare_brand_assets.py
 
       - name: Resolve packages
         working-directory: ${{ runner.temp }}/fluxmusic-build

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="flux" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d9ff7a"/><stop offset=".36" stop-color="#56ffd0"/><stop offset=".68" stop-color="#00b9ff"/><stop offset="1" stop-color="#a778ff"/></linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c8ff75"/><stop offset=".6" stop-color="#39eab9"/><stop offset="1" stop-color="#526cff"/></linearGradient>
+  </defs>
+  <g fill="url(#wave)" opacity=".95">
+    <rect x="54" y="245" width="13" height="42" rx="6.5"/><rect x="79" y="215" width="14" height="102" rx="7"/>
+    <rect x="105" y="184" width="15" height="164" rx="7.5"/><rect x="133" y="224" width="14" height="92" rx="7"/>
+    <rect x="363" y="226" width="14" height="90" rx="7"/><rect x="389" y="180" width="15" height="170" rx="7.5"/>
+    <rect x="416" y="213" width="14" height="105" rx="7"/><rect x="443" y="245" width="13" height="42" rx="6.5"/>
+  </g>
+  <g fill="none" stroke="url(#flux)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M218 327 C231 287 274 279 315 270 C355 261 378 230 379 190" stroke-width="28" opacity=".88"/>
+    <path d="M299 103 L299 319 C299 352 280 372 248 385 C229 393 205 403 188 419" stroke-width="30"/>
+    <path d="M153 239 C187 213 230 211 272 199 C310 188 344 168 357 132" stroke-width="25" opacity=".95"/>
+  </g>
+  <ellipse cx="191" cy="414" rx="43" ry="34" transform="rotate(-28 191 414)" fill="#0e2030" stroke="url(#flux)" stroke-width="12"/>
+  <path d="M278 101 L301 89" fill="none" stroke="#d8fff2" stroke-opacity=".9" stroke-width="5" stroke-linecap="round"/>
+</svg>

@@ -4,6 +4,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:dart_ytmusic_api/yt_music.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -237,10 +238,17 @@ class _MusicHomeState extends State<MusicHome> {
       await _remember(tracks[index]);
     } catch (e) {
       if (!mounted) return;
+      final message = fluxAudio.lastPlaybackError ??
+          'Could not start this track. Check your connection and try another result.';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not start this track. Try another result or try again later.'),
+        SnackBar(
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'RETRY',
+            onPressed: () => _playList(tracks, index),
+          ),
         ),
       );
     }
@@ -293,6 +301,11 @@ class _MusicHomeState extends State<MusicHome> {
                 ),
                 _miniPlayer(),
                 NavigationBar(
+                  height: 70,
+                  elevation: 0,
+                  backgroundColor: const Color(0xFF0A0D17),
+                  surfaceTintColor: Colors.transparent,
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                   selectedIndex: _tab,
                   onDestinationSelected: (index) => setState(() => _tab = index),
                   destinations: const <NavigationDestination>[
@@ -311,46 +324,32 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _topBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 12, 20, 14),
+      padding: const EdgeInsets.fromLTRB(20, 12, 18, 14),
       child: Row(
         children: <Widget>[
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              gradient: const LinearGradient(
-                colors: <Color>[_mint, Color(0xFF63D9C4)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: <BoxShadow>[BoxShadow(color: _mint.withValues(alpha: .18), blurRadius: 22, spreadRadius: 1)],
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              width: 46,
+              height: 46,
+              child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.cover),
             ),
-            child: const Icon(Icons.graphic_eq_rounded, color: _ink, size: 25),
           ),
-          const SizedBox(width: 11),
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text('FluxMusic', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: -.6)),
-              Text('FIND YOUR FREQUENCY', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: _muted, letterSpacing: 1.7)),
-            ],
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('FluxMusic', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -.7)),
+                SizedBox(height: 3),
+                Text('YOUR DAILY SOUNDTRACK', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: _muted, letterSpacing: 1.55)),
+              ],
+            ),
           ),
-          const Spacer(),
           IconButton(
             tooltip: 'Search music',
             onPressed: () => setState(() => _tab = 1),
             icon: const Icon(Icons.search_rounded, color: Colors.white, size: 25),
-          ),
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: .06),
-              border: Border.all(color: Colors.white.withValues(alpha: .08)),
-            ),
-            child: const Icon(Icons.waves_rounded, color: _violet, size: 19),
           ),
         ],
       ),
@@ -429,48 +428,74 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _featureCard() {
     return Container(
-      height: 180,
+      height: 222,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(25),
+        borderRadius: BorderRadius.circular(28),
         gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF252447), Color(0xFF172D38), Color(0xFF152024)],
+          colors: <Color>[Color(0xFF202840), Color(0xFF17152B), Color(0xFF102626)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: .08)),
+        border: Border.all(color: Colors.white.withValues(alpha: .09)),
+        boxShadow: <BoxShadow>[
+          BoxShadow(color: _violet.withValues(alpha: .08), blurRadius: 28, offset: const Offset(0, 12)),
+        ],
       ),
       child: Stack(
         children: <Widget>[
-          Positioned(right: -12, top: -22, child: Transform.rotate(angle: -.22, child: Icon(Icons.graphic_eq_rounded, size: 215, color: _mint.withValues(alpha: .09)))),
-          Positioned(right: 30, top: 34, child: Container(width: 88, height: 88, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _violet.withValues(alpha: .45), width: 1.5)))),
-          Positioned(right: 48, top: 52, child: Container(width: 52, height: 52, decoration: BoxDecoration(shape: BoxShape.circle, color: _mint.withValues(alpha: .12), border: Border.all(color: _mint.withValues(alpha: .5))), child: const Icon(Icons.play_arrow_rounded, size: 34, color: _mint))),
+          Positioned(
+            right: -30,
+            bottom: -37,
+            child: Opacity(
+              opacity: .92,
+              child: SvgPicture.asset(
+                'assets/brand/fluxmusic_foreground.svg',
+                width: 255,
+                height: 255,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 18,
+            top: 18,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .25),
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.white.withValues(alpha: .12)),
+              ),
+              child: const Text('CURATED FOR YOU', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.4, color: Colors.white)),
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 21, 145, 20),
+            padding: const EdgeInsets.fromLTRB(20, 21, 145, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                  decoration: BoxDecoration(color: _mint.withValues(alpha: .13), borderRadius: BorderRadius.circular(30)),
-                  child: const Text('FLUX SELECTS', style: TextStyle(color: _mint, fontWeight: FontWeight.w900, fontSize: 9, letterSpacing: 1.5)),
+                const Text('FLUX SELECTS', style: TextStyle(color: _mint, fontWeight: FontWeight.w900, fontSize: 10, letterSpacing: 2.1)),
+                const Spacer(),
+                const Text(
+                  'Press play.\nFeel everything.',
+                  style: TextStyle(fontSize: 25, height: 1.07, fontWeight: FontWeight.w900, letterSpacing: -1),
                 ),
+                const SizedBox(height: 8),
+                const Text('Find the track that fits your moment.', style: TextStyle(color: Color(0xFFB5BCD0), fontSize: 11, height: 1.35)),
                 const Spacer(),
-                const Text('Press play.\nLeave the ordinary.', style: TextStyle(fontSize: 21, height: 1.12, fontWeight: FontWeight.w900, letterSpacing: -.5)),
-                const SizedBox(height: 7),
-                const Text('Music for wherever you are.', style: TextStyle(color: _muted, fontSize: 11)),
-                const Spacer(),
-                InkWell(
-                  borderRadius: BorderRadius.circular(30),
-                  onTap: () => _search('best new music mix'),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text('Explore now', style: TextStyle(color: _mint, fontWeight: FontWeight.w800, fontSize: 12)),
-                      SizedBox(width: 7),
-                      Icon(Icons.arrow_forward_rounded, size: 15, color: _mint),
-                    ],
+                FilledButton.icon(
+                  onPressed: () => _search('new music mix'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _mint,
+                    foregroundColor: _ink,
+                    minimumSize: const Size(0, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w900, fontSize: 11),
                   ),
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('Explore music'),
                 ),
               ],
             ),
@@ -979,10 +1004,9 @@ class _CoverArt extends StatelessWidget {
     );
   }
 
-  Widget _artFallback() => Container(
-        color: const Color(0xFF24243A),
-        alignment: Alignment.center,
-        child: const Icon(Icons.graphic_eq_rounded, color: _mint, size: 25),
+  Widget _artFallback() => SvgPicture.asset(
+        'assets/brand/fluxmusic.svg',
+        fit: BoxFit.cover,
       );
 }
 
