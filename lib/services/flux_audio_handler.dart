@@ -155,10 +155,6 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     // a resolved URL when the playback User-Agent differs from the resolver.
     final strategies = <({YoutubeApiClient client, String userAgent})>[
       (
-        client: YoutubeApiClient.androidSdkless,
-        userAgent: 'com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip',
-      ),
-      (
         client: YoutubeApiClient.androidMusic,
         userAgent: 'com.google.android.youtube/19.29.1 (Linux; U; Android 11) gzip',
       ),
