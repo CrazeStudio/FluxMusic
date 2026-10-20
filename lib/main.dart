@@ -105,6 +105,7 @@ class _MusicHomeState extends State<MusicHome> {
   List<Track> _results = <Track>[];
   List<Track> _favorites = <Track>[];
   List<Track> _recent = <Track>[];
+  List<String> _searchHistory = <String>[];
 
   static const List<String> _moods = <String>[
     'Trending now',
@@ -128,6 +129,7 @@ class _MusicHomeState extends State<MusicHome> {
       final prefs = await SharedPreferences.getInstance();
       final favJson = prefs.getStringList('fluxmusic.favorites.v1') ?? <String>[];
       final recentJson = prefs.getStringList('fluxmusic.recent.v1') ?? <String>[];
+      _searchHistory = prefs.getStringList('fluxmusic.search_history.v1') ?? <String>[];
       _favorites = favJson.map(_decodeTrack).whereType<Track>().toList();
       _recent = recentJson.map(_decodeTrack).whereType<Track>().toList();
       if (mounted) setState(() {});
@@ -169,6 +171,10 @@ class _MusicHomeState extends State<MusicHome> {
     final clean = query.trim();
     if (clean.isEmpty) return;
     _searchController.text = clean;
+    _searchHistory.removeWhere((item) => item.toLowerCase() == clean.toLowerCase());
+    _searchHistory.insert(0, clean);
+    if (_searchHistory.length > 12) _searchHistory = _searchHistory.take(12).toList();
+    unawaited(_saveSearchHistory());
     FocusScope.of(context).unfocus();
     setState(() {
       _tab = 1;
@@ -226,6 +232,42 @@ class _MusicHomeState extends State<MusicHome> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList('fluxmusic.recent.v1', _recent.map(_encodeTrack).toList());
     if (mounted) setState(() {});
+  }
+
+
+  Future<void> _saveSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('fluxmusic.search_history.v1', _searchHistory);
+  }
+
+  Future<void> _clearListeningHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF171C2D),
+        title: const Text('Clear listening history?'),
+        content: const Text('This removes recently played tracks from this device. Your liked tracks stay saved.'),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: _ink),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear history'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    _recent.clear();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('fluxmusic.recent.v1');
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _clearSearchHistory() async {
+    setState(() => _searchHistory.clear());
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('fluxmusic.search_history.v1');
   }
 
   Future<void> _playList(List<Track> tracks, int index) async {
@@ -493,7 +535,17 @@ class _MusicHomeState extends State<MusicHome> {
         ),
         const SizedBox(height: 28),
         if (_recent.isNotEmpty) ...<Widget>[
-          _sectionHeading('Pick up where you left off', 'YOUR RECENT'),
+          Row(
+            children: <Widget>[
+              const Expanded(child: Text('Pick up where you left off', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3))),
+              TextButton.icon(
+                onPressed: _clearListeningHistory,
+                icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                label: const Text('Clear'),
+                style: TextButton.styleFrom(foregroundColor: _muted, visualDensity: VisualDensity.compact),
+              ),
+            ],
+          ),
           const SizedBox(height: 13),
           SizedBox(
             height: 164,
@@ -779,17 +831,47 @@ class _MusicHomeState extends State<MusicHome> {
                   style: const TextStyle(color: _muted, fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w800),
                 )
               else
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: <Widget>[
-                      _searchSuggestion('Trending', Icons.local_fire_department_rounded, 'trending music 2026'),
-                      const SizedBox(width: 8),
-                      _searchSuggestion('Anime', Icons.bolt_rounded, 'anime openings'),
-                      const SizedBox(width: 8),
-                      _searchSuggestion('Lofi', Icons.spa_rounded, 'lofi for focus'),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    if (_searchHistory.isNotEmpty) ...<Widget>[
+                      Row(
+                        children: <Widget>[
+                          const Expanded(child: Text('RECENT SEARCHES', style: TextStyle(color: _muted, fontSize: 9, letterSpacing: 1.2, fontWeight: FontWeight.w800))),
+                          TextButton(
+                            onPressed: _clearSearchHistory,
+                            style: TextButton.styleFrom(foregroundColor: _muted, visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 7)),
+                            child: const Text('Clear'),
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        spacing: 7,
+                        runSpacing: 7,
+                        children: _searchHistory.take(4).map((query) => ActionChip(
+                          avatar: const Icon(Icons.history_rounded, size: 14, color: _mint),
+                          label: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis),
+                          onPressed: () => _search(query),
+                          backgroundColor: const Color(0xFF171C2D),
+                          side: BorderSide(color: Colors.white.withValues(alpha: .07)),
+                          labelStyle: const TextStyle(color: Colors.white, fontSize: 11),
+                        )).toList(),
+                      ),
+                      const SizedBox(height: 9),
                     ],
-                  ),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: <Widget>[
+                          _searchSuggestion('Trending', Icons.local_fire_department_rounded, 'trending music 2026'),
+                          const SizedBox(width: 8),
+                          _searchSuggestion('Anime', Icons.bolt_rounded, 'anime openings'),
+                          const SizedBox(width: 8),
+                          _searchSuggestion('Lofi', Icons.spa_rounded, 'lofi for focus'),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),
@@ -916,7 +998,17 @@ class _MusicHomeState extends State<MusicHome> {
           ..._favorites.asMap().entries.map((entry) => _trackTile(entry.value, entry.key, _favorites)),
         if (_recent.isNotEmpty) ...<Widget>[
           const SizedBox(height: 24),
-          _sectionHeading('Listening history', 'ON THIS DEVICE'),
+          Row(
+            children: <Widget>[
+              const Expanded(child: Text('Listening history', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3))),
+              TextButton.icon(
+                onPressed: _clearListeningHistory,
+                icon: const Icon(Icons.delete_sweep_rounded, size: 16),
+                label: const Text('Clear history'),
+                style: TextButton.styleFrom(foregroundColor: _muted, visualDensity: VisualDensity.compact),
+              ),
+            ],
+          ),
           const SizedBox(height: 10),
           ..._recent.take(8).toList().asMap().entries.map((entry) => _trackTile(entry.value, entry.key, _recent, compact: true)),
         ],
