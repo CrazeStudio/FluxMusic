@@ -82,3 +82,15 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
     main_activity.write_text(source, encoding="utf-8")
 
 print("Patched Android label/icon, internet access, notification permission, and audio_service media playback.")
+
+
+# Keep the Kotlin coroutine types referenced by JNI in release builds.
+proguard_path = Path("android/app/proguard-rules.pro")
+proguard_path.write_text("""-keep class kotlin.Unit { *; }
+-keep class kotlin.Result { *; }
+-keep class kotlin.Result$Failure { *; }
+-keep class kotlin.coroutines.Continuation { *; }
+-keep class kotlin.coroutines.intrinsics.CoroutineSingletons { *; }
+-keep class kotlin.coroutines.intrinsics.IntrinsicsKt { *; }
+""", encoding="utf-8")
+print("Added R8 keep rules for Kotlin coroutine JNI symbols.")
