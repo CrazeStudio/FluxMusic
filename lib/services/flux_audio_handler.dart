@@ -189,8 +189,6 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
                 stream.url,
                 headers: <String, String>{
                   'User-Agent': strategy.userAgent,
-                  'Referer': 'https://www.youtube.com/',
-                  'Origin': 'https://www.youtube.com',
                 },
                 tag: item,
               ),
