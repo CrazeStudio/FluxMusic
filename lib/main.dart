@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:dart_ytmusic_api/yt_music.dart';
@@ -1516,6 +1517,27 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
                       IconButton(onPressed: () => widget.handler.stop(), icon: const Icon(Icons.stop_rounded, color: _muted, size: 23)),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => showModalBottomSheet<void>(
+                        context: context,
+                        isScrollControlled: true,
+                        useSafeArea: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => LyricsSheet(item: item),
+                      ),
+                      icon: const Icon(Icons.lyrics_rounded, color: _mint),
+                      label: const Text('View lyrics'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: _mint.withValues(alpha: .28)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
@@ -1568,6 +1590,148 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
     );
   }
 }
+
+
+class LyricsSheet extends StatefulWidget {
+  const LyricsSheet({super.key, required this.item});
+  final MediaItem item;
+
+  @override
+  State<LyricsSheet> createState() => _LyricsSheetState();
+}
+
+class _LyricsSheetState extends State<LyricsSheet> {
+  bool _loading = true;
+  String? _lyrics;
+  String? _message;
+  bool _synced = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLyrics();
+  }
+
+  Future<void> _loadLyrics() async {
+    setState(() {
+      _loading = true;
+      _lyrics = null;
+      _message = null;
+    });
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
+    try {
+      final uri = Uri.https('lrclib.net', '/api/get', <String, String>{
+        'track_name': widget.item.title,
+        'artist_name': widget.item.artist ?? '',
+        if ((widget.item.duration ?? Duration.zero).inSeconds > 0)
+          'duration': (widget.item.duration!.inSeconds).toString(),
+      });
+      final request = await client.getUrl(uri);
+      request.headers.set(HttpHeaders.userAgentHeader, 'FluxMusic/1.0 (Android music player)');
+      final response = await request.close().timeout(const Duration(seconds: 12));
+      final body = await response.transform(utf8.decoder).join();
+      if (response.statusCode != 200) {
+        throw HttpException('Lyrics provider returned HTTP ${response.statusCode}');
+      }
+      final data = jsonDecode(body) as Map<String, dynamic>;
+      final synced = data['syncedLyrics'] as String?;
+      final plain = data['plainLyrics'] as String?;
+      if (!mounted) return;
+      setState(() {
+        _synced = synced != null && synced.trim().isNotEmpty;
+        _lyrics = _synced ? synced : plain;
+        _message = (_lyrics == null || _lyrics!.trim().isEmpty)
+            ? 'Lyrics are not available for this track yet.'
+            : null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _message = 'Could not load lyrics. Check your connection and try again.';
+      });
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.sizeOf(context).height * .78,
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0D1120),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: Column(
+        children: <Widget>[
+          Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
+          const SizedBox(height: 18),
+          Row(
+            children: <Widget>[
+              const Icon(Icons.lyrics_rounded, color: _mint, size: 25),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('Lyrics', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
+              IconButton(onPressed: _loadLyrics, tooltip: 'Reload lyrics', icon: const Icon(Icons.refresh_rounded)),
+              IconButton(onPressed: () => Navigator.of(context).pop(), tooltip: 'Close lyrics', icon: const Icon(Icons.close_rounded)),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${widget.item.title} · ${widget.item.artist ?? 'Unknown artist'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: _muted, fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _loading
+                ? const Center(child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      CircularProgressIndicator(color: _mint),
+                      SizedBox(height: 14),
+                      Text('Finding lyrics…', style: TextStyle(color: _muted)),
+                    ],
+                  ))
+                : _lyrics == null || _lyrics!.trim().isEmpty
+                    ? Center(child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Icon(Icons.music_off_rounded, color: _muted, size: 36),
+                          const SizedBox(height: 12),
+                          Text(_message ?? 'Lyrics not found', textAlign: TextAlign.center, style: const TextStyle(color: _muted)),
+                          const SizedBox(height: 12),
+                          FilledButton.tonalIcon(onPressed: _loadLyrics, icon: const Icon(Icons.refresh_rounded), label: const Text('Try again')),
+                        ],
+                      ))
+                    : ListView(
+                        children: <Widget>[
+                          if (_synced)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 10),
+                              child: Text('Time-stamped lyrics available · displayed as text', style: TextStyle(color: _mint, fontSize: 11)),
+                            ),
+                          SelectableText(
+                            _lyrics!.replaceAll(RegExp(r'\[\d{2}:\d{2}(?:\.\d+)?\]'), '').trim(),
+                            style: const TextStyle(fontSize: 17, height: 1.8, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 20),
+                          const Text('Lyrics provided by LRCLIB. Availability and accuracy may vary.', style: TextStyle(color: _muted, fontSize: 10)),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 String _formatTime(Duration duration) {
   final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
