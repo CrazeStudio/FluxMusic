@@ -17,12 +17,10 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   int _queueIndex = 0;
   int _loadGeneration = 0;
   bool _shuffleEnabled = false;
-  bool _repeatEnabled = false;
   List<MediaItem>? _unshuffledQueue;
   String? _lastPlaybackError;
 
   bool get shuffleEnabled => _shuffleEnabled;
-  bool get repeatEnabled => _repeatEnabled;
   String? get lastPlaybackError => _lastPlaybackError;
 
   FluxAudioHandler() {
@@ -88,16 +86,6 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         MediaControl.skipToPrevious,
         if (_player.playing) MediaControl.pause else MediaControl.play,
         MediaControl.skipToNext,
-        MediaControl.custom(
-          name: 'shuffle',
-          label: _shuffleEnabled ? 'Shuffle on' : 'Shuffle off',
-          androidIcon: 'drawable/ic_action_shuffle',
-        ),
-        MediaControl.custom(
-          name: 'repeat',
-          label: _repeatEnabled ? 'Repeat one on' : 'Repeat off',
-          androidIcon: 'drawable/ic_action_repeat',
-        ),
         MediaControl.stop,
       ],
       androidCompactActionIndices: const <int>[0, 1, 2],
@@ -121,18 +109,6 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     await skipToQueueItem(safeIndex);
   }
 
-  @override
-  Future<void> customAction(String name, [Map<String, dynamic>? extras]) async {
-    if (name == 'shuffle') {
-      await toggleShuffle();
-    } else if (name == 'repeat') {
-      _repeatEnabled = !_repeatEnabled;
-      await _player.setLoopMode(_repeatEnabled ? LoopMode.one : LoopMode.off);
-      _publishPlaybackState();
-    } else {
-      await super.customAction(name, extras);
-    }
-  }
 
   Future<void> toggleShuffle() async {
     final current = mediaItem.value;
