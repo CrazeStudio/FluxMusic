@@ -30,7 +30,12 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       },
     );
     _player.playingStream.listen((_) => _publishPlaybackState());
-    _player.processingStateStream.listen((_) => _publishPlaybackState());
+    _player.processingStateStream.listen((state) {
+      _publishPlaybackState();
+      if (state == ProcessingState.completed && _queueIndex + 1 < queue.value.length) {
+        unawaited(skipToNext());
+      }
+    });
   }
 
   Stream<Duration> get positionStream => _player.positionStream;
@@ -166,9 +171,8 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> skipToNext() async {
     final items = queue.value;
-    if (items.isEmpty) return;
-    final next = (_queueIndex + 1) % items.length;
-    await skipToQueueItem(next);
+    if (items.isEmpty || _queueIndex + 1 >= items.length) return;
+    await skipToQueueItem(_queueIndex + 1);
   }
 
   @override
