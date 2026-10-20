@@ -56,8 +56,8 @@ class FluxMusicApp extends StatelessWidget {
         surface: _ink,
       ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 33, fontWeight: FontWeight.w800, letterSpacing: -1.4),
-        headlineMedium: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -0.8),
+        headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.4),
+        headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.8),
         titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         bodyMedium: TextStyle(fontSize: 14, color: _muted),
@@ -515,15 +515,15 @@ class _MusicHomeState extends State<MusicHome> {
         const SizedBox(height: 13),
         const Text(
           'Find your\nfrequency.',
-          style: TextStyle(fontSize: 38, height: 1.03, fontWeight: FontWeight.w900, letterSpacing: -1.8),
+          style: TextStyle(fontSize: 28, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.0),
         ),
         const SizedBox(height: 10),
         const Text('The right sound can change the whole moment.', style: TextStyle(color: _muted, fontSize: 13, height: 1.45)),
-        const SizedBox(height: 21),
+        const SizedBox(height: 14),
         _searchBox(hint: 'Songs, artists, albums...', onSubmitted: _search),
         const SizedBox(height: 20),
         _featureCard(),
-        const SizedBox(height: 28),
+        const SizedBox(height: 19),
         _sectionHeading('Made for your mood', 'QUICK PICKS'),
         const SizedBox(height: 13),
         SizedBox(
@@ -535,7 +535,7 @@ class _MusicHomeState extends State<MusicHome> {
             itemBuilder: (_, index) => _moodCard(_moods[index], index),
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 19),
         if (_recent.isNotEmpty) ...<Widget>[
           Row(
             children: <Widget>[
@@ -572,7 +572,7 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _featureCard() {
     return Container(
-      height: 228,
+      height: 198,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(27),
@@ -648,7 +648,7 @@ class _MusicHomeState extends State<MusicHome> {
                 const Spacer(),
                 const Text(
                   'Your next\nobsession.',
-                  style: TextStyle(fontSize: 27, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -1.1),
+                  style: TextStyle(fontSize: 22, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -.6),
                 ),
                 const SizedBox(height: 8),
                 const Text('Fresh sounds for wherever life takes you.', style: TextStyle(color: Color(0xFFB5C7CB), fontSize: 11, height: 1.35)),
@@ -819,7 +819,7 @@ class _MusicHomeState extends State<MusicHome> {
                 ],
               ),
               const SizedBox(height: 10),
-              const Text('Search the\nsoundtrack.', style: TextStyle(fontSize: 31, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -1.25)),
+              const Text('Search the\nsoundtrack.', style: TextStyle(fontSize: 25, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -.7)),
               const SizedBox(height: 8),
               const Text('Songs, artists and sounds on your mind.', style: TextStyle(color: _muted, fontSize: 12.5)),
               const SizedBox(height: 16),
@@ -936,7 +936,7 @@ class _MusicHomeState extends State<MusicHome> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  const Text('Your library', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1.1)),
+                  const Text('Your library', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7)),
                   const SizedBox(height: 6),
                   const Text('The tracks you keep close.', style: TextStyle(color: _muted, fontSize: 12.5)),
                 ],
@@ -1242,7 +1242,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
         Icon(Icons.graphic_eq_rounded, color: _mint, size: 32),
         SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-          Text('Audio enhancements', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+          Text('Audio enhancements', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           SizedBox(height: 4),
           Text('Cleaner sound, controlled peaks.', style: TextStyle(color: _muted, fontSize: 12)),
         ])),
@@ -1402,7 +1402,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
-                            Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 23, height: 1.1, fontWeight: FontWeight.w900, letterSpacing: -.6)),
+                            Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 20, height: 1.15, fontWeight: FontWeight.w800, letterSpacing: -.3)),
                             const SizedBox(height: 8),
                             Text(item.artist ?? 'Unknown artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 14)),
                           ],
@@ -1618,30 +1618,149 @@ class _LyricsSheetState extends State<LyricsSheet> {
       _lyrics = null;
       _message = null;
     });
+
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
-    try {
-      final uri = Uri.https('lrclib.net', '/api/get', <String, String>{
-        'track_name': widget.item.title,
-        'artist_name': widget.item.artist ?? '',
-        if ((widget.item.duration ?? Duration.zero).inSeconds > 0)
-          'duration': (widget.item.duration!.inSeconds).toString(),
-      });
-      final request = await client.getUrl(uri);
-      request.headers.set(HttpHeaders.userAgentHeader, 'FluxMusic/1.0 (Android music player)');
+    var receivedResponse = false;
+
+    String cleanTitle(String value) => value
+        .replaceAll(
+          RegExp(r'\s*[\[(](?:official|lyrics?|lyric video|music video|audio|video|visualizer|4k|hd)[^\])]*[\])]', caseSensitive: false),
+          '',
+        )
+        .replaceFirst(
+          RegExp(r'\s*[-|–]\s*(?:official audio|official video|lyrics?|lyric video|music video|visualizer).*$', caseSensitive: false),
+          '',
+        )
+        .trim();
+
+    String normalise(String value) => value
+        .toLowerCase()
+        .replaceAll(RegExp(r'\[[^\]]*\]|\([^)]*\)'), ' ')
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .trim();
+
+    Future<Object?> fetchJson(Uri uri) async {
+      final request = await client.getUrl(uri).timeout(const Duration(seconds: 10));
+      request.headers.set(HttpHeaders.userAgentHeader, 'FluxMusic/1.1 (https://github.com/CrazeStudio/FluxMusic)');
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
       final response = await request.close().timeout(const Duration(seconds: 12));
       final body = await response.transform(utf8.decoder).join();
-      if (response.statusCode != 200) {
-        throw HttpException('Lyrics provider returned HTTP ${response.statusCode}');
+      receivedResponse = true;
+      if (response.statusCode == 404) return null;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw HttpException('Lyrics provider returned HTTP ' + response.statusCode.toString());
       }
-      final data = jsonDecode(body) as Map<String, dynamic>;
-      final synced = data['syncedLyrics'] as String?;
-      final plain = data['plainLyrics'] as String?;
+      return jsonDecode(body);
+    }
+
+    bool hasLyrics(Map<String, dynamic> row) {
+      final synced = row['syncedLyrics'] ?? row['synced_lyrics'];
+      final plain = row['plainLyrics'] ?? row['plain_lyrics'];
+      return (synced is String && synced.trim().isNotEmpty) ||
+          (plain is String && plain.trim().isNotEmpty);
+    }
+
+    Map<String, dynamic>? bestSearchMatch(Object? payload, String title, String artist) {
+      if (payload is! List) return null;
+      final titleKey = normalise(title);
+      final artistKey = normalise(artist);
+      final rows = payload
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .where(hasLyrics)
+          .toList();
+      if (rows.isEmpty) return null;
+
+      int score(Map<String, dynamic> row) {
+        final rowTitle = normalise((row['trackName'] ?? row['name'] ?? row['track_name'] ?? '').toString());
+        final rowArtist = normalise((row['artistName'] ?? row['artist_name'] ?? '').toString());
+        var value = 0;
+        if (rowTitle == titleKey) {
+          value += 100;
+        } else if (rowTitle.contains(titleKey) || titleKey.contains(rowTitle)) {
+          value += 35;
+        }
+        if (artistKey.isNotEmpty && rowArtist == artistKey) {
+          value += 60;
+        } else if (artistKey.isNotEmpty &&
+            (rowArtist.contains(artistKey) || artistKey.contains(rowArtist))) {
+          value += 25;
+        }
+        final targetDuration = (widget.item.duration ?? Duration.zero).inSeconds;
+        final rowDuration = row['duration'];
+        if (targetDuration > 0 && rowDuration is num) {
+          final difference = (rowDuration - targetDuration).abs();
+          if (difference <= 5) value += 25;
+          else if (difference <= 15) value += 10;
+        }
+        return value;
+      }
+
+      rows.sort((first, second) => score(second).compareTo(score(first)));
+      return rows.first;
+    }
+
+    Map<String, dynamic>? asLyricsRecord(Object? payload) {
+      if (payload is Map) {
+        final row = Map<String, dynamic>.from(payload);
+        return hasLyrics(row) ? row : null;
+      }
+      return null;
+    }
+
+    try {
+      final title = cleanTitle(widget.item.title);
+      final rawArtist = widget.item.artist ?? '';
+      final artist = rawArtist.replaceFirst(RegExp(r'\s*-\s*Topic$', caseSensitive: false), '').trim();
+      Map<String, dynamic>? record;
+      final duration = (widget.item.duration ?? Duration.zero).inSeconds;
+
+      // Try the strict metadata lookup first, then fall back to fuzzy search.
+      try {
+        final exactPayload = await fetchJson(Uri.https('lrclib.net', '/api/get', <String, String>{
+          'track_name': title,
+          if (artist.isNotEmpty) 'artist_name': artist,
+          if (duration > 0) 'duration': duration.toString(),
+        }));
+        record = asLyricsRecord(exactPayload);
+      } catch (_) {
+        // Continue to search if exact metadata does not match.
+      }
+
+      if (record == null) {
+        final searches = <Map<String, String>>[
+          <String, String>{
+            'track_name': title,
+            if (artist.isNotEmpty) 'artist_name': artist,
+          },
+          if (artist.isNotEmpty) <String, String>{'q': '$title $artist'},
+          <String, String>{'track_name': title},
+        ];
+
+        for (final query in searches) {
+          try {
+            final payload = await fetchJson(Uri.https('lrclib.net', '/api/search', query));
+            record = bestSearchMatch(payload, title, artist);
+            if (record != null) break;
+          } catch (_) {
+            // Keep trying alternate query forms.
+          }
+        }
+      }
+
       if (!mounted) return;
+      final synced = record?['syncedLyrics'] ?? record?['synced_lyrics'];
+      final plain = record?['plainLyrics'] ?? record?['plain_lyrics'];
+      final lyrics = synced is String && synced.trim().isNotEmpty
+          ? synced
+          : (plain is String ? plain : null);
       setState(() {
-        _synced = synced != null && synced.trim().isNotEmpty;
-        _lyrics = _synced ? synced : plain;
-        _message = (_lyrics == null || _lyrics!.trim().isEmpty)
-            ? 'Lyrics are not available for this track yet.'
+        _synced = synced is String && synced.trim().isNotEmpty;
+        _lyrics = lyrics;
+        _message = lyrics == null || lyrics.trim().isEmpty
+            ? (receivedResponse
+                ? 'No matching lyrics were found. Try another version of this track.'
+                : 'Could not reach the lyrics service. Check your connection and try again.')
             : null;
         _loading = false;
       });
@@ -1649,13 +1768,12 @@ class _LyricsSheetState extends State<LyricsSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _message = 'Could not load lyrics. Check your connection and try again.';
+        _message = 'Could not reach the lyrics service. Check your connection and try again.';
       });
     } finally {
       client.close(force: true);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -1673,7 +1791,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
             children: <Widget>[
               const Icon(Icons.lyrics_rounded, color: _mint, size: 25),
               const SizedBox(width: 10),
-              const Expanded(child: Text('Lyrics', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900))),
+              const Expanded(child: Text('Lyrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
               IconButton(onPressed: _loadLyrics, tooltip: 'Reload lyrics', icon: const Icon(Icons.refresh_rounded)),
               IconButton(onPressed: () => Navigator.of(context).pop(), tooltip: 'Close lyrics', icon: const Icon(Icons.close_rounded)),
             ],
@@ -1719,7 +1837,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
                             ),
                           SelectableText(
                             _lyrics!.replaceAll(RegExp(r'\[\d{2}:\d{2}(?:\.\d+)?\]'), '').trim(),
-                            style: const TextStyle(fontSize: 17, height: 1.8, fontWeight: FontWeight.w600),
+                            style: const TextStyle(fontSize: 15, height: 1.7, fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(height: 20),
                           const Text('Lyrics provided by LRCLIB. Availability and accuracy may vary.', style: TextStyle(color: _muted, fontSize: 10)),
