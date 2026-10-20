@@ -140,7 +140,9 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         ),
       );
       if (generation != _loadGeneration) return;
-      await play();
+      // AudioPlayer.play() completes when playback ends; don't keep the queue
+      // change request waiting for the entire song to finish.
+      unawaited(play());
     } catch (_) {
       if (generation == _loadGeneration) {
         playbackState.add(playbackState.value.copyWith(
