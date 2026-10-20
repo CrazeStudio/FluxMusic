@@ -151,44 +151,30 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     ));
 
     Object? lastError;
-    // Keep each manifest tied to the matching media client. YouTube can reject
-    // a resolved URL when the playback User-Agent differs from the resolver.
-    final strategies = <({YoutubeApiClient client, String userAgent})>[
-      (
-        client: YoutubeApiClient.androidMusic,
-        userAgent: 'com.google.android.youtube/19.29.1 (Linux; U; Android 11) gzip',
-      ),
-      (
-        client: YoutubeApiClient.ios,
-        userAgent: 'com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)',
-      ),
-    ];
+    try {
+      // Do not force an old client here. YouTube has started rejecting audio
+      // URLs from several previously working clients with HTTP 403. The pinned
+      // extractor fork adds the visionOS client and selects compatible clients
+      // itself. Fetching the watch page is required for that resolution path.
+      final manifest = await _youtube.videos.streams
+          .getManifest(videoId, requireWatchPage: true)
+          .timeout(const Duration(seconds: 25));
+      final candidates = manifest.audioOnly.toList()
+        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
 
-    for (final strategy in strategies) {
-      if (generation != _loadGeneration) return;
-      try {
-        final manifest = await _youtube.videos.streams
-            .getManifest(videoId, ytClients: <YoutubeApiClient>[strategy.client])
-            .timeout(const Duration(seconds: 15));
-        final candidates = manifest.audioOnly.toList()
-          ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
-        if (candidates.isEmpty) {
-          lastError = StateError('No audio-only streams were returned for this client.');
-          continue;
-        }
-
-        for (final stream in candidates.take(4)) {
+      if (candidates.isEmpty) {
+        lastError = StateError('YouTube returned no audio-only streams for this track.');
+      } else {
+        // Try several audio formats/bitrates in case one endpoint is rejected.
+        for (final stream in candidates.take(6)) {
           if (generation != _loadGeneration) return;
           try {
             await _player.setAudioSource(
               AudioSource.uri(
                 stream.url,
-                headers: <String, String>{
-                  'User-Agent': strategy.userAgent,
-                },
                 tag: item,
               ),
-            ).timeout(const Duration(seconds: 18));
+            ).timeout(const Duration(seconds: 22));
             if (generation != _loadGeneration) return;
             _lastPlaybackError = null;
             _publishPlaybackState();
@@ -199,9 +185,9 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
             await _player.stop();
           }
         }
-      } catch (error) {
-        lastError = error;
       }
+    } catch (error) {
+      lastError = error;
     }
 
     if (generation == _loadGeneration) {
