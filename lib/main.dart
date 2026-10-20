@@ -1313,7 +1313,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                 const SizedBox(height: 8),
                 InkWell(
                   borderRadius: BorderRadius.circular(14),
-                  onTap: () => showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true, backgroundColor: Colors.transparent, builder: (_) => LyricsSheet(item: item)),
+                  onTap: () => showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true, backgroundColor: Colors.transparent, builder: (_) => LyricsSheet(item: item, handler: widget.handler)),
                   child: Container(height: 60, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(14)),
                     child: const Row(children: <Widget>[
                       Icon(Icons.lyrics_rounded, color: _mint, size: 21), SizedBox(width: 12),
@@ -1379,8 +1379,9 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
 }
 
 class LyricsSheet extends StatefulWidget {
-  const LyricsSheet({super.key, required this.item});
+  const LyricsSheet({super.key, required this.item, required this.handler});
   final MediaItem item;
+  final FluxAudioHandler handler;
 
   @override
   State<LyricsSheet> createState() => _LyricsSheetState();
@@ -1391,6 +1392,9 @@ class _LyricsSheetState extends State<LyricsSheet> {
   String? _lyrics;
   String? _message;
   bool _synced = false;
+  final ScrollController _lyricsScrollController = ScrollController();
+  List<_LyricLine> _lyricLines = <_LyricLine>[];
+  int _activeLyricIndex = -1;
 
   @override
   void initState() {
@@ -1402,6 +1406,8 @@ class _LyricsSheetState extends State<LyricsSheet> {
     setState(() {
       _loading = true;
       _lyrics = null;
+      _lyricLines = <_LyricLine>[];
+      _activeLyricIndex = -1;
       _message = null;
     });
 
@@ -1547,6 +1553,8 @@ class _LyricsSheetState extends State<LyricsSheet> {
           : (plain is String ? plain : null);
       setState(() {
         _synced = synced is String && synced.trim().isNotEmpty;
+        _lyricLines = synced is String ? _parseLrc(synced) : <_LyricLine>[];
+        _activeLyricIndex = -1;
         _lyrics = lyrics;
         _message = lyrics == null || lyrics.trim().isEmpty
             ? (receivedResponse
@@ -1565,6 +1573,99 @@ class _LyricsSheetState extends State<LyricsSheet> {
       client.close(force: true);
     }
   }
+  @override
+  void dispose() {
+    _lyricsScrollController.dispose();
+    super.dispose();
+  }
+
+  List<_LyricLine> _parseLrc(String lyrics) {
+    final timestamp = RegExp(r'\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]');
+    final parsed = <_LyricLine>[];
+    for (final rawLine in lyrics.split(RegExp(r'\r?\n'))) {
+      final matches = timestamp.allMatches(rawLine).toList();
+      if (matches.isEmpty) continue;
+      final text = rawLine.replaceAll(timestamp, '').trim();
+      if (text.isEmpty) continue;
+      for (final match in matches) {
+        final minutes = int.tryParse(match.group(1) ?? '') ?? 0;
+        final seconds = int.tryParse(match.group(2) ?? '') ?? 0;
+        final fractional = (match.group(3) ?? '0').padRight(3, '0').substring(0, 3);
+        final milliseconds = int.tryParse(fractional) ?? 0;
+        parsed.add(_LyricLine(
+          time: Duration(minutes: minutes, seconds: seconds, milliseconds: milliseconds),
+          text: text,
+        ));
+      }
+    }
+    parsed.sort((a, b) => a.time.compareTo(b.time));
+    return parsed;
+  }
+
+  Widget _syncedLyricsView() {
+    return StreamBuilder<Duration>(
+      stream: widget.handler.positionStream,
+      initialData: Duration.zero,
+      builder: (context, snapshot) {
+        final position = snapshot.data ?? Duration.zero;
+        var activeIndex = -1;
+        for (var index = 0; index < _lyricLines.length; index++) {
+          if (_lyricLines[index].time <= position) {
+            activeIndex = index;
+          } else {
+            break;
+          }
+        }
+        if (activeIndex != _activeLyricIndex) {
+          _activeLyricIndex = activeIndex;
+          if (activeIndex >= 0) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!_lyricsScrollController.hasClients || !mounted) return;
+              final target = (activeIndex * 58.0).clamp(
+                0.0,
+                _lyricsScrollController.position.maxScrollExtent,
+              );
+              _lyricsScrollController.animateTo(
+                target,
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+              );
+            });
+          }
+        }
+        return ListView.builder(
+          controller: _lyricsScrollController,
+          itemExtent: 58,
+          itemCount: _lyricLines.length,
+          itemBuilder: (context, index) {
+            final line = _lyricLines[index];
+            final active = index == activeIndex;
+            return InkWell(
+              onTap: () => widget.handler.seek(line.time),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 7),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    line.text,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: active ? _ink : _playerMuted,
+                      fontSize: active ? 17 : 14,
+                      height: 1.3,
+                      fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Theme(
@@ -1625,18 +1726,24 @@ class _LyricsSheetState extends State<LyricsSheet> {
                           FilledButton.tonalIcon(onPressed: _loadLyrics, icon: const Icon(Icons.refresh_rounded), label: const Text('Try again')),
                         ],
                       ))
-                    : ListView(
+                    : Column(
                         children: <Widget>[
-                          if (_synced)
+                          if (_synced && _lyricLines.isNotEmpty)
                             const Padding(
-                              padding: EdgeInsets.only(bottom: 10),
-                              child: Text('Time-stamped lyrics available · displayed as text', style: TextStyle(color: _mint, fontSize: 11)),
+                              padding: EdgeInsets.only(bottom: 6),
+                              child: Text('Tap a line to seek · synced lyrics', style: TextStyle(color: _mint, fontSize: 11)),
                             ),
-                          SelectableText(
-                            _lyrics!.replaceAll(RegExp(r'\[\d{2}:\d{2}(?:\.\d+)?\]'), '').trim(),
-                            style: const TextStyle(fontSize: 15, height: 1.7, fontWeight: FontWeight.w500),
+                          Expanded(
+                            child: _synced && _lyricLines.isNotEmpty
+                                ? _syncedLyricsView()
+                                : SingleChildScrollView(
+                                    child: SelectableText(
+                                      _lyrics!.replaceAll(RegExp(r'\[\d{2}:\d{2}(?:\.\d+)?\]'), '').trim(),
+                                      style: const TextStyle(fontSize: 15, height: 1.7, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 14),
                           const Text('Lyrics provided by LRCLIB. Availability and accuracy may vary.', style: TextStyle(color: _playerMuted, fontSize: 10)),
                         ],
                       ),
@@ -1653,6 +1760,13 @@ String _formatTime(Duration duration) {
   final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
   final hours = duration.inHours;
   return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+}
+
+class _LyricLine {
+  const _LyricLine({required this.time, required this.text});
+
+  final Duration time;
+  final String text;
 }
 
 class _DecorativeArt extends StatelessWidget {
