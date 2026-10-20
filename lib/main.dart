@@ -563,12 +563,12 @@ class _MusicHomeState extends State<MusicHome> {
           mainAxisSpacing: 10,
           childAspectRatio: 2.05,
           children: <Widget>[
-            _catalogueTile('Anime & OST', 'Openings and scores', const Color(0xFFD9C8E9), Icons.auto_awesome_rounded, 'anime openings'),
-            _catalogueTile('Lo-fi & Focus', 'Stay in your zone', const Color(0xFFC5D5C1), Icons.headphones_rounded, 'lofi beats focus'),
-            _catalogueTile('Indian Hits', 'Hindi • Bengali • more', const Color(0xFFE8C4B8), Icons.graphic_eq_rounded, 'Indian hit songs Hindi Bengali'),
-            _catalogueTile('Indie Finds', 'Beyond the mainstream', const Color(0xFFC7D7E8), Icons.album_rounded, 'indie music'),
-            _catalogueTile('Chill & Ambient', 'Slow down a little', const Color(0xFFD3D5B7), Icons.nightlight_round, 'chill ambient music'),
-            _catalogueTile('Workout Energy', 'Turn it up', const Color(0xFFE8C4D0), Icons.bolt_rounded, 'workout upbeat music'),
+            _catalogueTile('Anime & OST', 'Openings and scores', const Color(0xFF25202B), Icons.auto_awesome_rounded, 'anime openings'),
+            _catalogueTile('Lo-fi & Focus', 'Stay in your zone', const Color(0xFF202820), Icons.headphones_rounded, 'lofi beats focus'),
+            _catalogueTile('Indian Hits', 'Hindi • Bengali • more', const Color(0xFF2A211F), Icons.graphic_eq_rounded, 'Indian hit songs Hindi Bengali'),
+            _catalogueTile('Indie Finds', 'Beyond the mainstream', const Color(0xFF20252B), Icons.album_rounded, 'indie music'),
+            _catalogueTile('Chill & Ambient', 'Slow down a little', const Color(0xFF29291E), Icons.nightlight_round, 'chill ambient music'),
+            _catalogueTile('Workout Energy', 'Turn it up', const Color(0xFF2A2026), Icons.bolt_rounded, 'workout upbeat music'),
           ],
         ),
         const SizedBox(height: 18),
@@ -604,7 +604,7 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _catalogueTile(String title, String subtitle, Color color, IconData icon, String query) {
     return Material(
-      color: color.withValues(alpha: .65),
+      color: color,
       borderRadius: BorderRadius.circular(17),
       child: InkWell(
         borderRadius: BorderRadius.circular(17),
@@ -612,14 +612,14 @@ class _MusicHomeState extends State<MusicHome> {
         child: Ink(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: color.withValues(alpha: .95)),
+            border: Border.all(color: Colors.white.withValues(alpha: .07)),
           ),
           child: Stack(children: <Widget>[
-            Positioned(right: 8, top: 6, child: Icon(icon, size: 39, color: _cardInk.withValues(alpha: .55))),
+            Positioned(right: 8, top: 6, child: Icon(icon, size: 39, color: _muted.withValues(alpha: .65))),
             Padding(
               padding: const EdgeInsets.fromLTRB(11, 9, 5, 9),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: <Widget>[
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _cardInk, fontSize: 12, fontWeight: FontWeight.w800)),
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 3),
                 Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 9)),
               ]),
@@ -1104,7 +1104,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
         const SizedBox(height: 4),
         Text(subtitle, style: const TextStyle(fontSize: 10.5, color: _playerMuted, height: 1.35)),
       ])),
-      Switch.adaptive(value: value, activeColor: _mint, onChanged: onChanged),
+      Switch.adaptive(value: value, activeThumbColor: _ink, activeTrackColor: _mint, onChanged: onChanged),
     ]),
   );
 }
@@ -1574,7 +1574,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
       height: MediaQuery.sizeOf(context).height * .78,
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
       decoration: const BoxDecoration(
-        color: Color(0xFF0D1120),
+        color: Color(0xFF121212),
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
@@ -1658,16 +1658,16 @@ class _DecorativeArt extends StatelessWidget {
   final int variant;
   @override
   Widget build(BuildContext context) {
-    final bases = <Color>[const Color(0xFFD9C8E9), const Color(0xFFE8C4B8), const Color(0xFFC5D5C1), const Color(0xFFC7D7E8)];
+    final bases = <Color>[const Color(0xFF242126), const Color(0xFF29211F), const Color(0xFF222820), const Color(0xFF20252B)];
     final accents = <Color>[const Color(0xFFB9796A), const Color(0xFF777B43), const Color(0xFF6C927E), const Color(0xFF6C83A1)];
     final base = bases[variant % bases.length];
     final accent = accents[variant % accents.length];
     return Container(
       width: size, height: size, clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[base, Color.lerp(base, Colors.white, .4)!])),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[base, Color.lerp(base, Colors.white, .08)!])),
       child: Stack(children: <Widget>[
         Positioned(right: -size * .04, top: size * .08, child: Container(width: size * .68, height: size * .68, decoration: BoxDecoration(shape: BoxShape.circle, color: accent.withValues(alpha: .88)))),
-        Positioned(left: size * .10, bottom: size * .17, child: Container(width: size * .80, height: size * .14, decoration: BoxDecoration(color: const Color(0xFFC7F545), borderRadius: BorderRadius.circular(size * .08)))),
+        Positioned(left: size * .10, bottom: size * .17, child: Container(width: size * .80, height: size * .14, decoration: BoxDecoration(color: const Color(0xFF777B43), borderRadius: BorderRadius.circular(size * .08)))),
         Positioned(left: size * .18, top: size * .13, child: Container(width: size * .18, height: size * .18, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF121212)))),
         Positioned(right: size * .17, bottom: size * .12, child: Container(width: size * .13, height: size * .13, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: .72)))),
       ]),
