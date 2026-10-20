@@ -1163,7 +1163,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                     onSelected: (value) async {
                       if (value == 'copy') {
                         await Clipboard.setData(ClipboardData(text: 'https://music.youtube.com/watch?v=${item.id}'));
-                        if (!mounted) return;
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track link copied'), behavior: SnackBarBehavior.floating));
                       } else if (value.startsWith('speed:')) {
                         await widget.handler.setSpeed(double.parse(value.substring(6)));
@@ -1436,7 +1436,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
       receivedResponse = true;
       if (response.statusCode == 404) return null;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw HttpException('Lyrics provider returned HTTP ' + response.statusCode.toString());
+        throw HttpException('Lyrics provider returned HTTP ${response.statusCode}');
       }
       return jsonDecode(body);
     }
@@ -1478,8 +1478,11 @@ class _LyricsSheetState extends State<LyricsSheet> {
         final rowDuration = row['duration'];
         if (targetDuration > 0 && rowDuration is num) {
           final difference = (rowDuration - targetDuration).abs();
-          if (difference <= 5) value += 25;
-          else if (difference <= 15) value += 10;
+          if (difference <= 5) {
+            value += 25;
+          } else if (difference <= 15) {
+            value += 10;
+          }
         }
         return value;
       }
