@@ -32,6 +32,7 @@ jobs:
           cp -R lib "${RUNNER_TEMP}/fluxmusic-build/lib"
           cp -R tool "${RUNNER_TEMP}/fluxmusic-build/tool"
           cp -R assets "${RUNNER_TEMP}/fluxmusic-build/assets"
+          rm -rf "${RUNNER_TEMP}/fluxmusic-build/test"
           if [ -d test ]; then cp -R test "${RUNNER_TEMP}/fluxmusic-build/test"; fi
           cd "${RUNNER_TEMP}/fluxmusic-build"
           python3 tool/patch_android.py
