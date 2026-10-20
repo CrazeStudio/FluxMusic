@@ -226,9 +226,13 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       queue.add(List<MediaItem>.unmodifiable(shuffled));
       _queueIndex = 0;
     } else {
+      final current = currentQueue[_queueIndex];
       final restored = List<MediaItem>.of(_unshuffledQueue ?? currentQueue);
+      final identityIndex = restored.indexWhere((item) => identical(item, current));
       queue.add(List<MediaItem>.unmodifiable(restored));
-      _queueIndex = (_unshuffledQueueIndex ?? 0).clamp(0, restored.length - 1).toInt();
+      _queueIndex = (identityIndex >= 0 ? identityIndex : (_unshuffledQueueIndex ?? 0))
+          .clamp(0, restored.length - 1)
+          .toInt();
       _unshuffledQueue = null;
       _unshuffledQueueIndex = null;
     }
