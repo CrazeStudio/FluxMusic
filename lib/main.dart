@@ -467,7 +467,37 @@ class _MusicHomeState extends State<MusicHome> {
             _quickChip('Energy', 'upbeat music'),
           ]),
         ),
-        const SizedBox(height: 17),
+        const SizedBox(height: 20),
+        Row(children: <Widget>[
+          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+            Text('Explore catalogue', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.35)),
+            SizedBox(height: 3),
+            Text('A sound for every side of you', style: TextStyle(color: _muted, fontSize: 11)),
+          ])),
+          TextButton(
+            onPressed: () => setState(() => _tab = 1),
+            style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+            child: const Text('Browse all  ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ]),
+        const SizedBox(height: 11),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 2.12,
+          children: <Widget>[
+            _catalogueTile('Anime & OST', 'Anime openings', const Color(0xFF7049B8), Icons.auto_awesome_rounded, 'anime openings'),
+            _catalogueTile('Lo-fi & Focus', 'Stay in the zone', const Color(0xFF286E65), Icons.headphones_rounded, 'lofi beats focus'),
+            _catalogueTile('Indian Hits', 'Hindi • Bengali • more', const Color(0xFFB15A3D), Icons.graphic_eq_rounded, 'Indian hit songs Hindi Bengali'),
+            _catalogueTile('Indie Finds', 'Outside the mainstream', const Color(0xFF4269A3), Icons.album_rounded, 'indie music'),
+            _catalogueTile('Chill & Ambient', 'Slow down a little', const Color(0xFF397D8B), Icons.nightlight_round, 'chill ambient music'),
+            _catalogueTile('Workout Energy', 'Turn it up', const Color(0xFF8D476D), Icons.bolt_rounded, 'workout upbeat music'),
+          ],
+        ),
+        const SizedBox(height: 21),
         _sectionHeading('Made for your mood', 'SEE ALL  →'),
         const SizedBox(height: 10),
         _featureCard(),
@@ -487,6 +517,34 @@ class _MusicHomeState extends State<MusicHome> {
           ..._recent.take(4).toList().asMap().entries.map((entry) => _recentTrackRow(entry.value, entry.key)),
         const SizedBox(height: 6),
       ],
+    );
+  }
+
+  Widget _catalogueTile(String title, String subtitle, Color color, IconData icon, String query) {
+    return Material(
+      color: color.withValues(alpha: .18),
+      borderRadius: BorderRadius.circular(15),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: () => _search(query),
+        child: Ink(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: color.withValues(alpha: .35)),
+          ),
+          child: Stack(children: <Widget>[
+            Positioned(right: 7, top: 5, child: Icon(icon, size: 38, color: color.withValues(alpha: .8))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 4, 8),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: <Widget>[
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 9)),
+              ]),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 
