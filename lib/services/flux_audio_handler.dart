@@ -9,6 +9,8 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 /// Background audio service. Stream resolution is unofficial and may break
 /// when YouTube changes its delivery mechanisms, so the handler tries more
 /// than one supported client and keeps a readable error for the UI.
+enum FluxRepeatMode { off, all, one }
+
 class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   final YoutubeExplode _youtube = YoutubeExplode();
@@ -16,30 +18,51 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final Map<String, _CandidateCacheEntry> _candidateCache = <String, _CandidateCacheEntry>{};
   final Map<String, Future<List<dynamic>>> _candidateRequests = <String, Future<List<dynamic>>>{};
   Timer? _sleepTimer;
+  Timer? _sleepTimerTicker;
   DateTime? _sleepTimerEndsAt;
+  final ValueNotifier<Duration?> sleepTimerRemaining = ValueNotifier<Duration?>(null);
 
   int _queueIndex = 0;
   int _loadGeneration = 0;
   bool _shuffleEnabled = false;
-  bool _repeatEnabled = false;
+  FluxRepeatMode _repeatMode = FluxRepeatMode.off;
   List<MediaItem>? _unshuffledQueue;
+  int? _unshuffledQueueIndex;
+  bool _autoAdvanceRunning = false;
   String? _lastPlaybackError;
 
   bool get shuffleEnabled => _shuffleEnabled;
-  bool get repeatEnabled => _repeatEnabled;
+  bool get repeatEnabled => _repeatMode != FluxRepeatMode.off;
+  FluxRepeatMode get repeatMode => _repeatMode;
   String? get lastPlaybackError => _lastPlaybackError;
   DateTime? get sleepTimerEndsAt => _sleepTimerEndsAt;
 
   void setSleepTimer(Duration? duration) {
     _sleepTimer?.cancel();
+    _sleepTimerTicker?.cancel();
     _sleepTimer = null;
+    _sleepTimerTicker = null;
     _sleepTimerEndsAt = null;
+    sleepTimerRemaining.value = null;
     if (duration == null || duration <= Duration.zero) return;
+
     _sleepTimerEndsAt = DateTime.now().add(duration);
+    sleepTimerRemaining.value = duration;
+    _sleepTimerTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final end = _sleepTimerEndsAt;
+      if (end == null) return;
+      final remaining = end.difference(DateTime.now());
+      sleepTimerRemaining.value = remaining.isNegative ? Duration.zero : remaining;
+    });
     _sleepTimer = Timer(duration, () {
+      _sleepTimerTicker?.cancel();
+      _sleepTimerTicker = null;
       _sleepTimer = null;
       _sleepTimerEndsAt = null;
-      unawaited(pause());
+      sleepTimerRemaining.value = null;
+      unawaited(pause().catchError((Object error) {
+        _setError(error);
+      }));
     });
   }
 
@@ -97,8 +120,8 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     _player.playingStream.listen((_) => _publishPlaybackState());
     _player.processingStateStream.listen((state) {
       _publishPlaybackState();
-      if (state == ProcessingState.completed && _queueIndex + 1 < queue.value.length) {
-        unawaited(skipToNext());
+      if (state == ProcessingState.completed) {
+        unawaited(_advanceAfterCompletion());
       }
     });
   }
@@ -176,8 +199,9 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (items.isEmpty) return;
     queue.add(List<MediaItem>.unmodifiable(items));
     _shuffleEnabled = false;
-    _repeatEnabled = false;
+    _repeatMode = FluxRepeatMode.off;
     _unshuffledQueue = null;
+    _unshuffledQueueIndex = null;
     await _player.setLoopMode(LoopMode.off);
     final safeIndex = startIndex.clamp(0, items.length - 1).toInt();
     await skipToQueueItem(safeIndex);
@@ -185,32 +209,89 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
 
   Future<void> toggleShuffle() async {
-    final current = mediaItem.value;
     final currentQueue = queue.value;
-    if (current == null || currentQueue.length < 2) return;
+    if (currentQueue.length < 2 || _queueIndex < 0 || _queueIndex >= currentQueue.length) return;
+
     if (!_shuffleEnabled) {
       _unshuffledQueue = List<MediaItem>.of(currentQueue);
-      final shuffled = List<MediaItem>.of(currentQueue)
-        ..removeWhere((item) => item.id == current.id)
-        ..shuffle(Random());
+      _unshuffledQueueIndex = _queueIndex;
+      final current = currentQueue[_queueIndex];
+      final shuffled = <MediaItem>[];
+      for (var index = 0; index < currentQueue.length; index++) {
+        if (index != _queueIndex) shuffled.add(currentQueue[index]);
+      }
+      shuffled.shuffle(Random());
       shuffled.insert(0, current);
       queue.add(List<MediaItem>.unmodifiable(shuffled));
       _queueIndex = 0;
     } else {
       final restored = List<MediaItem>.of(_unshuffledQueue ?? currentQueue);
       queue.add(List<MediaItem>.unmodifiable(restored));
-      final restoredIndex = restored.indexWhere((item) => item.id == current.id);
-      _queueIndex = restoredIndex < 0 ? 0 : restoredIndex;
+      _queueIndex = (_unshuffledQueueIndex ?? 0).clamp(0, restored.length - 1).toInt();
       _unshuffledQueue = null;
+      _unshuffledQueueIndex = null;
     }
     _shuffleEnabled = !_shuffleEnabled;
     _publishPlaybackState();
   }
 
   Future<void> toggleRepeat() async {
-    _repeatEnabled = !_repeatEnabled;
-    await _player.setLoopMode(_repeatEnabled ? LoopMode.one : LoopMode.off);
+    _repeatMode = switch (_repeatMode) {
+      FluxRepeatMode.off => FluxRepeatMode.all,
+      FluxRepeatMode.all => FluxRepeatMode.one,
+      FluxRepeatMode.one => FluxRepeatMode.off,
+    };
+    await _player.setLoopMode(_repeatMode == FluxRepeatMode.one ? LoopMode.one : LoopMode.off);
     _publishPlaybackState();
+  }
+
+  int? _nextQueueIndex() {
+    final items = queue.value;
+    if (items.isEmpty) return null;
+    if (_queueIndex + 1 < items.length) return _queueIndex + 1;
+    return _repeatMode == FluxRepeatMode.all ? 0 : null;
+  }
+
+  Future<void> _advanceAfterCompletion() async {
+    if (_autoAdvanceRunning) return;
+    _autoAdvanceRunning = true;
+    Object? lastError;
+    var failures = 0;
+    try {
+      while (failures < 3) {
+        final nextIndex = _nextQueueIndex();
+        if (nextIndex == null) {
+          if (lastError != null) {
+            await _player.stop();
+            _lastPlaybackError =
+                'Could not play the next track after $failures attempt(s). Try another version or retry later.';
+            _publishPlaybackState();
+          }
+          return;
+        }
+        try {
+          await skipToQueueItem(nextIndex);
+          return;
+        } catch (error) {
+          lastError = error;
+          failures++;
+        }
+      }
+      await _player.stop();
+      _lastPlaybackError =
+          'Could not play the next $failures tracks. Check your connection or try another search result.';
+      _publishPlaybackState();
+    } catch (error) {
+      _lastPlaybackError = _describeError(lastError ?? error);
+      try {
+        await _player.stop();
+      } catch (_) {
+        // Preserve the readable failure state if stopping fails.
+      }
+      _publishPlaybackState();
+    } finally {
+      _autoAdvanceRunning = false;
+    }
   }
 
   @override
@@ -348,9 +429,9 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> skipToNext() async {
-    final items = queue.value;
-    if (items.isEmpty || _queueIndex + 1 >= items.length) return;
-    await skipToQueueItem(_queueIndex + 1);
+    final nextIndex = _nextQueueIndex();
+    if (nextIndex == null) return;
+    await skipToQueueItem(nextIndex);
   }
 
   @override
@@ -361,8 +442,11 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     }
     final items = queue.value;
     if (items.isEmpty) return;
-    final previous = (_queueIndex - 1 + items.length) % items.length;
-    await skipToQueueItem(previous);
+    if (_queueIndex > 0) {
+      await skipToQueueItem(_queueIndex - 1);
+    } else if (_repeatMode == FluxRepeatMode.all) {
+      await skipToQueueItem(items.length - 1);
+    }
   }
 
   @override
@@ -377,8 +461,11 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> stop() async {
     ++_loadGeneration;
     _sleepTimer?.cancel();
+    _sleepTimerTicker?.cancel();
     _sleepTimer = null;
+    _sleepTimerTicker = null;
     _sleepTimerEndsAt = null;
+    sleepTimerRemaining.value = null;
     _lastPlaybackError = null;
     await _player.stop();
     mediaItem.add(null);
@@ -388,6 +475,8 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   Future<void> disposePlayer() async {
     ++_loadGeneration;
     _sleepTimer?.cancel();
+    _sleepTimerTicker?.cancel();
+    sleepTimerRemaining.dispose();
     _youtube.close();
     await _player.dispose();
   }
