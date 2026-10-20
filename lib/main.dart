@@ -439,7 +439,7 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _discover() {  Widget _discover() {
+  Widget _discover() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 26),
       children: <Widget>[
@@ -841,7 +841,7 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _libraryPage() {  Widget _libraryPage() {
+  Widget _libraryPage() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
       children: <Widget>[
