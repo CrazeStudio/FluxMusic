@@ -15,12 +15,13 @@ import 'services/flux_audio_handler.dart';
 
 late final FluxAudioHandler fluxAudio;
 
-const _ink = Color(0xFF29261F);
-const _panel = Color(0xFFFFFCF5);
+const _ink = Color(0xFFF5F5F5);
+const _cardInk = Color(0xFF29261F);
+const _panel = Color(0xFF1E1E1E);
 const _mint = Color(0xFF777B43);
 const _violet = Color(0xFFB9796A);
-const _muted = Color(0xFF7C7569);
-const _playerMuted = Color(0xFF9AA0AC);
+const _muted = Color(0xFFB0B0B0);
+const _playerMuted = Color(0xFF9E9E9E);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,12 +50,12 @@ class FluxMusicApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = ThemeData(
       useMaterial3: true,
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: const Color(0xFFF7F2E7),
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: const Color(0xFF121212),
       colorScheme: ColorScheme.fromSeed(
         seedColor: _mint,
-        brightness: Brightness.light,
-        surface: const Color(0xFFFFFCF5),
+        brightness: Brightness.dark,
+        surface: const Color(0xFF1E1E1E),
       ),
       textTheme: const TextTheme(
         headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.2, color: _ink),
@@ -63,9 +64,9 @@ class FluxMusicApp extends StatelessWidget {
         titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _ink),
         bodyMedium: TextStyle(fontSize: 14, color: _muted),
       ),
-      appBarTheme: const AppBarTheme(backgroundColor: Color(0xFFF7F2E7), foregroundColor: _ink, surfaceTintColor: Colors.transparent),
+      appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF121212), foregroundColor: _ink, surfaceTintColor: Colors.transparent),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: const Color(0xFFF7F2E7),
+        backgroundColor: const Color(0xFF121212),
         indicatorColor: _mint.withValues(alpha: .15),
         labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>(
           (states) => TextStyle(
@@ -76,12 +77,12 @@ class FluxMusicApp extends StatelessWidget {
         ),
       ),
       inputDecorationTheme: const InputDecorationTheme(
-        hintStyle: TextStyle(color: Color(0xFF9A9387), fontSize: 13),
+        hintStyle: TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
       ),
       sliderTheme: const SliderThemeData(
         activeTrackColor: _mint,
         thumbColor: _mint,
-        inactiveTrackColor: Color(0xFFDAD2C4),
+        inactiveTrackColor: Color(0xFF444444),
         overlayColor: Color(0x22777B43),
       ),
       snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
@@ -112,6 +113,8 @@ class _MusicHomeState extends State<MusicHome> {
   String? _error;
   String _lastQuery = '';
   List<Track> _results = <Track>[];
+  final Map<String, List<Track>> _searchCache = <String, List<Track>>{};
+  int _searchGeneration = 0;
   List<Track> _favorites = <Track>[];
   List<Track> _recent = <Track>[];
   List<String> _searchHistory = <String>[];
@@ -179,8 +182,11 @@ class _MusicHomeState extends State<MusicHome> {
   Future<void> _search(String query) async {
     final clean = query.trim();
     if (clean.isEmpty) return;
+    final searchKey = clean.toLowerCase();
+    final generation = ++_searchGeneration;
+
     _searchController.text = clean;
-    _searchHistory.removeWhere((item) => item.toLowerCase() == clean.toLowerCase());
+    _searchHistory.removeWhere((item) => item.toLowerCase() == searchKey);
     _searchHistory.insert(0, clean);
     if (_searchHistory.length > 12) _searchHistory = _searchHistory.take(12).toList();
     unawaited(_saveSearchHistory());
@@ -191,28 +197,47 @@ class _MusicHomeState extends State<MusicHome> {
       _lastQuery = clean;
       _error = null;
     });
+
+    final cached = _searchCache[searchKey];
+    if (cached != null) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _results = cached;
+        _searching = false;
+        _error = cached.isEmpty ? 'No songs found. Try a different search.' : null;
+      });
+      return;
+    }
+
     try {
-      final dynamic raw = await _ytMusic.searchSongs(clean);
+      final dynamic raw = await _ytMusic
+          .searchSongs(clean)
+          .timeout(const Duration(seconds: 18));
       final tracks = <Track>[];
+      final seenIds = <String>{};
       if (raw is Iterable) {
         for (final item in raw) {
           final track = Track.fromYouTubeMusic(item);
-          if (track.id.isNotEmpty && !tracks.any((t) => t.id == track.id)) {
+          if (track.id.isNotEmpty && seenIds.add(track.id)) {
             tracks.add(track);
           }
         }
       }
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
+      _searchCache[searchKey] = List<Track>.unmodifiable(tracks);
+      if (_searchCache.length > 24) {
+        _searchCache.remove(_searchCache.keys.first);
+      }
       setState(() {
         _results = tracks;
         _searching = false;
         _error = tracks.isEmpty ? 'No songs found. Try a different search.' : null;
       });
-    } catch (e) {
-      if (!mounted) return;
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _searching = false;
-        _error = 'Search failed. The catalogue may be temporarily unavailable.';
+        _error = 'Search took too long or the catalogue is unavailable. Check your connection and retry.';
       });
     }
   }
@@ -253,7 +278,7 @@ class _MusicHomeState extends State<MusicHome> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFFFFFCF5),
+        backgroundColor: const Color(0xFF1E1E1E),
         title: const Text('Clear listening history?'),
         content: const Text('This removes recently played tracks from this device. Your liked tracks stay saved.'),
         actions: <Widget>[
@@ -370,7 +395,7 @@ class _MusicHomeState extends State<MusicHome> {
                 NavigationBar(
                   height: 62,
                   elevation: 0,
-                  backgroundColor: const Color(0xFFF7F2E7),
+                  backgroundColor: const Color(0xFF121212),
                   surfaceTintColor: Colors.transparent,
                   labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                   selectedIndex: _tab,
@@ -402,7 +427,7 @@ class _MusicHomeState extends State<MusicHome> {
         child: Row(children: <Widget>[
           Container(
             width: 31, height: 31,
-            decoration: BoxDecoration(color: const Color(0xFFE0DFC8), borderRadius: BorderRadius.circular(11)),
+            decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(11)),
             child: const Icon(Icons.music_note_rounded, color: _mint, size: 20),
           ),
           const SizedBox(width: 9),
@@ -414,7 +439,7 @@ class _MusicHomeState extends State<MusicHome> {
               onTap: _openAudioEnhancements,
               child: Container(
                 width: 36, height: 36, alignment: Alignment.center,
-                decoration: BoxDecoration(color: const Color(0xFFFFFCF5), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFE4DCCD))),
+                decoration: BoxDecoration(color: const Color(0xFF1E1E1E), shape: BoxShape.circle, border: Border.all(color: const Color(0xFF333333))),
                 child: const Icon(Icons.tune_rounded, color: _mint, size: 19),
               ),
             ),
@@ -583,11 +608,11 @@ class _MusicHomeState extends State<MusicHome> {
             border: Border.all(color: color.withValues(alpha: .95)),
           ),
           child: Stack(children: <Widget>[
-            Positioned(right: 8, top: 6, child: Icon(icon, size: 39, color: _ink.withValues(alpha: .55))),
+            Positioned(right: 8, top: 6, child: Icon(icon, size: 39, color: _cardInk.withValues(alpha: .55))),
             Padding(
               padding: const EdgeInsets.fromLTRB(11, 9, 5, 9),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: <Widget>[
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _cardInk, fontSize: 12, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 3),
                 Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 9)),
               ]),
@@ -600,14 +625,14 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _quickChip(String label, String query, {bool selected = false}) {
     return Material(
-      color: selected ? const Color(0xFFE1DFC8) : const Color(0xFFFFFCF5),
+      color: selected ? const Color(0xFF2A2A2A) : const Color(0xFF1E1E1E),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: () => _search(query),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? _mint.withValues(alpha: .45) : const Color(0xFFE4DCCD))),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? _mint.withValues(alpha: .45) : const Color(0xFF333333))),
           child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: selected ? _ink : _muted)),
         ),
       ),
@@ -639,7 +664,7 @@ class _MusicHomeState extends State<MusicHome> {
       height: 166,
       clipBehavior: Clip.antiAlias,
       padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(color: const Color(0xFFEAE2D2), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFDDD2C0))),
+      decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF333333))),
       child: Row(children: <Widget>[
         const _DecorativeArt(size: 122, variant: 0),
         const SizedBox(width: 13),
@@ -693,22 +718,22 @@ class _MusicHomeState extends State<MusicHome> {
               border: Border.all(color: colors.last),
             ),
             child: Stack(children: <Widget>[
-              Positioned(right: -13, top: -19, child: Icon(icon, size: 95, color: _ink.withValues(alpha: .075))),
+              Positioned(right: -13, top: -19, child: Icon(icon, size: 95, color: _cardInk.withValues(alpha: .075))),
               Padding(
                 padding: const EdgeInsets.all(13),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                   Container(
                     width: 34, height: 34,
                     decoration: BoxDecoration(color: Colors.white.withValues(alpha: .6), borderRadius: BorderRadius.circular(12)),
-                    child: Icon(icon, color: _ink.withValues(alpha: .75), size: 19),
+                    child: Icon(icon, color: _cardInk.withValues(alpha: .75), size: 19),
                   ),
                   const Spacer(),
-                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
+                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _cardInk, fontSize: 12, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Row(children: <Widget>[
                     const Text('PLAY MIX', style: TextStyle(fontSize: 8, color: _muted, fontWeight: FontWeight.w800, letterSpacing: 1.05)),
                     const Spacer(),
-                    Icon(Icons.arrow_outward_rounded, color: _ink.withValues(alpha: .7), size: 13),
+                    Icon(Icons.arrow_outward_rounded, color: _cardInk.withValues(alpha: .7), size: 13),
                   ]),
                 ]),
               ),
@@ -921,7 +946,7 @@ class _MusicHomeState extends State<MusicHome> {
   Widget _libraryChip(String label, int index) {
     final selected = _libraryFilter == index;
     return Material(
-      color: selected ? const Color(0xFFE1DFC8) : const Color(0xFFFFFCF5),
+      color: selected ? const Color(0xFF2A2A2A) : const Color(0xFF1E1E1E),
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18), onTap: () => setState(() => _libraryFilter = index),
@@ -936,10 +961,10 @@ class _MusicHomeState extends State<MusicHome> {
   Widget _searchBox({required String hint, required ValueChanged<String> onSubmitted}) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFCF5),
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: const Color(0xFFE7DECF)),
-        boxShadow: <BoxShadow>[BoxShadow(color: const Color(0xFF7B6A4A).withValues(alpha: .09), blurRadius: 18, offset: const Offset(0, 6))],
+        border: Border.all(color: const Color(0xFF333333)),
+        boxShadow: <BoxShadow>[BoxShadow(color: const Color(0xFF000000).withValues(alpha: .09), blurRadius: 18, offset: const Offset(0, 6))],
       ),
       child: TextField(
         controller: _searchController,
@@ -954,7 +979,7 @@ class _MusicHomeState extends State<MusicHome> {
             onPressed: () => onSubmitted(_searchController.text),
           ),
           hintText: hint,
-          hintStyle: const TextStyle(color: Color(0xFF9A9387), fontSize: 13),
+          hintStyle: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 17, horizontal: 10),
         ),
@@ -1026,14 +1051,14 @@ class _MusicHomeState extends State<MusicHome> {
         return Padding(
           padding: const EdgeInsets.fromLTRB(14, 4, 14, 7),
           child: Material(
-            color: const Color(0xFFFFFCF5),
+            color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(15),
             child: InkWell(
               borderRadius: BorderRadius.circular(15), onTap: _openPlayer,
               child: Container(
                 height: 55,
                 padding: const EdgeInsets.symmetric(horizontal: 9),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFFE5DCCB))),
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFF333333))),
                 child: Row(children: <Widget>[
                   _CoverArt(url: item.extras?['thumbnailUrl'] as String? ?? '', size: 39, radius: 9),
                   const SizedBox(width: 10),
@@ -1105,13 +1130,13 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
   @override
   Widget build(BuildContext context) => Theme(
     data: ThemeData.dark(useMaterial3: true).copyWith(
-  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF090B10)),
+  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF121212)),
   textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF343A4D)),
+  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF444444)),
 ),
     child: Container(
     padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
-    decoration: const BoxDecoration(color: Color(0xFF101526), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+    decoration: const BoxDecoration(color: Color(0xFF121212), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
     child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
       Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
       const SizedBox(height: 22),
@@ -1134,13 +1159,13 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       _tile(Icons.speaker_rounded, 'Bass boost', 'Adds weight to low frequencies for bass-forward listening.', _bassBoost, (v) => _set('bassBoost', v)),
       if (_note != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_note!, style: const TextStyle(color: _playerMuted, fontSize: 11))),
       const SizedBox(height: 12),
-      const Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF737C96), fontSize: 10)),
+      const Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 10)),
     ]),
   ));
 
   Widget _tile(IconData icon, String title, String subtitle, bool value, ValueChanged<bool> onChanged) => Container(
     padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-    decoration: BoxDecoration(color: const Color(0xFF191F32), borderRadius: BorderRadius.circular(17), border: Border.all(color: Colors.white.withValues(alpha: .055))),
+    decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(17), border: Border.all(color: Colors.white.withValues(alpha: .055))),
     child: Row(children: <Widget>[
       Icon(icon, color: _mint, size: 24),
       const SizedBox(width: 12),
@@ -1187,14 +1212,14 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
             final playing = playback?.playing ?? false;
             return Theme(
               data: ThemeData.dark(useMaterial3: true).copyWith(
-  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF090B10)),
+  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF121212)),
   textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF343A4D)),
+  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF444444)),
 ),
               child: Container(
               height: MediaQuery.sizeOf(context).height * .96,
               padding: const EdgeInsets.fromLTRB(20, 9, 20, 18),
-              decoration: const BoxDecoration(color: Color(0xFF090B10), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+              decoration: const BoxDecoration(color: Color(0xFF121212), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
               child: Column(children: <Widget>[
                 Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .2), borderRadius: BorderRadius.circular(8))),
                 const SizedBox(height: 10),
@@ -1202,7 +1227,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   IconButton(visualDensity: VisualDensity.compact, onPressed: () => Navigator.of(context).pop(), icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 27)),
                   const Expanded(child: Text('NOW PLAYING', textAlign: TextAlign.center, style: TextStyle(color: _playerMuted, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.6))),
                   PopupMenuButton<String>(
-                    tooltip: 'More playback options', icon: const Icon(Icons.more_horiz_rounded, size: 24), color: const Color(0xFF1B1F26),
+                    tooltip: 'More playback options', icon: const Icon(Icons.more_horiz_rounded, size: 24), color: const Color(0xFF252525),
                     onSelected: (value) async {
                       if (value == 'copy') {
                         await Clipboard.setData(ClipboardData(text: 'https://music.youtube.com/watch?v=${item.id}'));
@@ -1210,6 +1235,20 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Track link copied'), behavior: SnackBarBehavior.floating));
                       } else if (value.startsWith('speed:')) {
                         await widget.handler.setSpeed(double.parse(value.substring(6)));
+                      } else if (value.startsWith('sleep:')) {
+                        final option = value.substring(6);
+                        widget.handler.setSleepTimer(
+                          option == 'off' ? null : Duration(minutes: int.parse(option)),
+                        );
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(option == 'off'
+                                ? 'Sleep timer cancelled.'
+                                : 'Music will pause in $option minutes.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
                       }
                     },
                     itemBuilder: (_) => <PopupMenuEntry<String>>[
@@ -1221,6 +1260,12 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                           const SizedBox(width: 8),
                           Text('${speed.toStringAsFixed(speed == speed.roundToDouble() ? 0 : 2)}× speed'),
                         ])),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem<String>(enabled: false, child: Text('Sleep timer')),
+                      const PopupMenuItem<String>(value: 'sleep:15', child: Text('Pause in 15 minutes')),
+                      const PopupMenuItem<String>(value: 'sleep:30', child: Text('Pause in 30 minutes')),
+                      const PopupMenuItem<String>(value: 'sleep:60', child: Text('Pause in 60 minutes')),
+                      const PopupMenuItem<String>(value: 'sleep:off', child: Text('Cancel sleep timer')),
                     ],
                   ),
                 ]),
@@ -1281,7 +1326,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                 InkWell(
                   borderRadius: BorderRadius.circular(14),
                   onTap: () => showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true, backgroundColor: Colors.transparent, builder: (_) => LyricsSheet(item: item)),
-                  child: Container(height: 60, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: const Color(0xFF131620), borderRadius: BorderRadius.circular(14)),
+                  child: Container(height: 60, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(14)),
                     child: const Row(children: <Widget>[
                       Icon(Icons.lyrics_rounded, color: _mint, size: 21), SizedBox(width: 12),
                       Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
@@ -1302,7 +1347,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                       builder: (sheetContext) => Container(
                         height: MediaQuery.sizeOf(sheetContext).height * .7,
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                        decoration: const BoxDecoration(color: Color(0xFF090B10), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                        decoration: const BoxDecoration(color: Color(0xFF121212), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
                         child: Column(children: <Widget>[
                           Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
                           const SizedBox(height: 16),
@@ -1323,7 +1368,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                       ),
                     );
                   },
-                  child: Container(height: 50, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: const Color(0xFF131620), borderRadius: BorderRadius.circular(13)),
+                  child: Container(height: 50, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(13)),
                     child: Row(children: <Widget>[
                       const Icon(Icons.queue_music_rounded, color: _playerMuted, size: 20), const SizedBox(width: 12),
                       const Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
@@ -1532,9 +1577,9 @@ class _LyricsSheetState extends State<LyricsSheet> {
   Widget build(BuildContext context) {
     return Theme(
       data: ThemeData.dark(useMaterial3: true).copyWith(
-  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF090B10)),
+  colorScheme: ColorScheme.fromSeed(seedColor: _mint, brightness: Brightness.dark, surface: const Color(0xFF121212)),
   textTheme: ThemeData.dark().textTheme.apply(bodyColor: Colors.white, displayColor: Colors.white),
-  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF343A4D)),
+  sliderTheme: const SliderThemeData(activeTrackColor: _mint, thumbColor: _mint, inactiveTrackColor: Color(0xFF444444)),
 ),
       child: Container(
       height: MediaQuery.sizeOf(context).height * .78,
@@ -1634,7 +1679,7 @@ class _DecorativeArt extends StatelessWidget {
       child: Stack(children: <Widget>[
         Positioned(right: -size * .04, top: size * .08, child: Container(width: size * .68, height: size * .68, decoration: BoxDecoration(shape: BoxShape.circle, color: accent.withValues(alpha: .88)))),
         Positioned(left: size * .10, bottom: size * .17, child: Container(width: size * .80, height: size * .14, decoration: BoxDecoration(color: const Color(0xFFC7F545), borderRadius: BorderRadius.circular(size * .08)))),
-        Positioned(left: size * .18, top: size * .13, child: Container(width: size * .18, height: size * .18, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF090B10)))),
+        Positioned(left: size * .18, top: size * .13, child: Container(width: size * .18, height: size * .18, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF121212)))),
         Positioned(right: size * .17, bottom: size * .12, child: Container(width: size * .13, height: size * .13, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: .72)))),
       ]),
     );
