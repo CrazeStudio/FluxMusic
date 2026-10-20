@@ -125,7 +125,7 @@ class Track {
         artist: item.artist ?? 'Unknown artist',
         album: item.album ?? '',
         thumbnailUrl: _string(item.extras?['thumbnailUrl']),
-        durationText: '',
+        durationText: _string(item.extras?['durationText']),
       );
 
   MediaItem toMediaItem() => MediaItem(
