@@ -779,12 +779,12 @@ class _MusicHomeState extends State<MusicHome> {
             const Text('Browse categories', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
             const SizedBox(height: 10),
             Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
-              _genreTile('Electronic', const Color(0xFF7059EB), 'electronic music'),
-              _genreTile('Chill', const Color(0xFF1F666E), 'chill music'),
-              _genreTile('Indie', const Color(0xFFFA6399), 'indie music'),
-              _genreTile('Focus', const Color(0xFF56652A), 'focus music'),
-              _genreTile('Hip-hop', const Color(0xFF984744), 'hip hop'),
-              _genreTile('Ambient', const Color(0xFF39558C), 'ambient music'),
+              _genreTile('Electronic', const Color(0xFFD9C8E9), 'electronic music'),
+              _genreTile('Chill', const Color(0xFFC5D5C1), 'chill music'),
+              _genreTile('Indie', const Color(0xFFE8C4B8), 'indie music'),
+              _genreTile('Focus', const Color(0xFFD3D5B7), 'focus music'),
+              _genreTile('Hip-hop', const Color(0xFFE8C4D0), 'hip hop'),
+              _genreTile('Ambient', const Color(0xFFC7D7E8), 'ambient music'),
             ]),
             const SizedBox(height: 22),
             Row(children: <Widget>[
@@ -1682,27 +1682,20 @@ class _Atmosphere extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
+    return const Positioned.fill(
       child: IgnorePointer(
-        child: Stack(
-          children: <Widget>[
-            const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[_ink, Color(0xFF0D1020), _ink]))),
-            Positioned(
-              top: -120,
-              right: -100,
-              child: _Glow(size: 290, color: _violet.withValues(alpha: .11)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: <Color>[
+                Color(0xFFF8F4EA),
+                Color(0xFFF2EBDD),
+                Color(0xFFFBF8F0),
+              ],
             ),
-            Positioned(
-              top: 250,
-              left: -160,
-              child: _Glow(size: 310, color: const Color(0xFF2CD5BB).withValues(alpha: .07)),
-            ),
-            Positioned(
-              bottom: -160,
-              right: -100,
-              child: _Glow(size: 300, color: const Color(0xFF4D5DFF).withValues(alpha: .08)),
-            ),
-          ],
+          ),
         ),
       ),
     );
