@@ -8,7 +8,7 @@ if not manifest_path.exists():
 text = manifest_path.read_text(encoding="utf-8")
 
 # Use a friendly app name and the custom launcher resource in the generated manifest.
-app_match = re.search(r'<application\\b[^>]*>', text, re.S)
+app_match = re.search(r'<application[^>]*>', text, re.S)
 if app_match:
     app_tag = app_match.group(0)
     if re.search(r'android:label="[^"]*"', app_tag):
