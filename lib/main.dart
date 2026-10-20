@@ -1399,7 +1399,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                                 }
                                 return ReorderableListView.builder(
                                   itemCount: items.length,
-                                  onReorder: widget.handler.moveQueueItem,
+                                  onReorderItem: widget.handler.moveQueueItem,
                                   itemBuilder: (context, index) {
                                     final queued = items[index];
                                     final current = index == widget.handler.currentQueueIndex;
