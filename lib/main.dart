@@ -940,6 +940,37 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
                       );
                     },
                   ),
+                  if (playback?.errorMessage != null) ...<Widget>[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3A1D2A),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFF804055)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            playback!.errorMessage!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Color(0xFFFFC4D0), fontSize: 11.5, height: 1.35),
+                          ),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () => widget.handler.play(),
+                              icon: const Icon(Icons.refresh_rounded, size: 17),
+                              label: const Text('Retry audio'),
+                              style: TextButton.styleFrom(foregroundColor: _mint),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
