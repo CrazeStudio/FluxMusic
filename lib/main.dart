@@ -238,8 +238,7 @@ class _MusicHomeState extends State<MusicHome> {
       await _remember(tracks[index]);
     } catch (e) {
       if (!mounted) return;
-      final message = fluxAudio.lastPlaybackError ??
-          'Could not start this track. Check your connection and try another result.';
+      final message = fluxAudio.lastPlaybackError ?? 'Could not start this track: $e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
