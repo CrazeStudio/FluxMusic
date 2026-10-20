@@ -248,6 +248,8 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   @override
+  Future<void> setSpeed(double speed) => _player.setSpeed(speed);
+
   Future<void> pause() => _player.pause();
 
   @override
