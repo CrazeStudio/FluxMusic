@@ -959,6 +959,43 @@ class _MusicHomeState extends State<MusicHome> {
               onPressed: () => _toggleFavorite(track),
               icon: Icon(favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: favorite ? _mint : _muted, size: 20),
             ),
+            PopupMenuButton<String>(
+              tooltip: 'Queue options',
+              icon: const Icon(Icons.more_vert_rounded, color: _muted, size: 21),
+              onSelected: (action) {
+                final item = track.toMediaItem();
+                if (action == 'next') {
+                  fluxAudio.playNext(item);
+                } else {
+                  fluxAudio.addToQueue(item);
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(action == 'next' ? 'Added to play next.' : 'Added to queue.'),
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              },
+              itemBuilder: (_) => const <PopupMenuEntry<String>>[
+                PopupMenuItem<String>(
+                  value: 'next',
+                  child: Row(children: <Widget>[
+                    Icon(Icons.play_arrow_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Play next'),
+                  ]),
+                ),
+                PopupMenuItem<String>(
+                  value: 'queue',
+                  child: Row(children: <Widget>[
+                    Icon(Icons.queue_music_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Add to queue'),
+                  ]),
+                ),
+              ],
+            ),
             if (!compact)
               IconButton(
                 tooltip: 'Play track',
