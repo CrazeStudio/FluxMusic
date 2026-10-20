@@ -144,9 +144,13 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
                         )
                     }
                     if (drcEnabled) {
-                        builder.setMbcBandAllChannelsTo(
-                            0,
-                            DynamicsProcessing.MbcBand(true, 20000.0f, 15.0f, 150.0f, 3.0f, -18.0f, 6.0f, -60.0f, 1.0f, -60.0f, 0.0f)
+                        builder.setMbcAllChannelsTo(
+                            DynamicsProcessing.Mbc(true, true, 1).apply {
+                                setBand(
+                                    0,
+                                    DynamicsProcessing.MbcBand(true, 20000.0f, 15.0f, 150.0f, 3.0f, -18.0f, 6.0f, -60.0f, 1.0f, -60.0f, 0.0f)
+                                )
+                            }
                         )
                     }
                     val config = builder.build()
