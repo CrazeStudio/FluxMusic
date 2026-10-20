@@ -194,19 +194,3 @@ proguard_path.write_text("""-keep class kotlin.Unit { *; }
 -keep class kotlin.coroutines.intrinsics.IntrinsicsKt { *; }
 """, encoding="utf-8")
 print("Added R8 keep rules for Kotlin coroutine JNI symbols.")
-
-
-# Vector icons used by the expanded playback notification actions.
-drawable_dir = Path("android/app/src/main/res/drawable")
-drawable_dir.mkdir(parents=True, exist_ok=True)
-(drawable_dir / "ic_action_shuffle.xml").write_text("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M17,3h4v4h-2V6.41l-4.29,4.3 -1.42,-1.42L17.59,5H17V3zM3,7h4.5c1.1,0 2.14,0.48 2.86,1.31l6.28,7.38c0.34,0.4 0.85,0.63 1.36,0.63H21v2h-3c-1.1,0 -2.14,-0.48 -2.86,-1.31L8.86,9.63C8.52,9.23 8.01,9 7.5,9H3V7zM17,17.59l-2.29,-2.3 -1.42,1.42L17,20.41V21h2v-4h-2v0.59zM3,15h4.5c0.5,0 0.98,-0.22 1.32,-0.6l1.4,-1.65 -1.42,-1.42 -1.5,1.67H3v2z"/>
-</vector>
-""", encoding="utf-8")
-(drawable_dir / "ic_action_repeat.xml").write_text("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M7,7h11v3l4,-4 -4,-4v3H7C4.79,5 3,6.79 3,9v2h2V9c0,-1.1 0.9,-2 2,-2zM17,17H6v-3l-4,4 4,4v-3h11c2.21,0 4,-1.79 4,-4v-2h-2v2c0,1.1 -0.9,2 -2,2z"/>
-</vector>
-""", encoding="utf-8")
-print("Added shuffle and repeat icons for notification controls.")
