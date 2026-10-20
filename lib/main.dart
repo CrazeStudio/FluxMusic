@@ -789,7 +789,17 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
                         SizedBox(height: 4),
                         Text('FluxMusic session', style: TextStyle(fontSize: 12, color: _muted)),
                       ])),
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.more_horiz_rounded, size: 27)),
+                      IconButton(
+                        tooltip: 'Copy YouTube Music link',
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: 'https://music.youtube.com/watch?v=${item.id}'));
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Track link copied'), behavior: SnackBarBehavior.floating),
+                          );
+                        },
+                        icon: const Icon(Icons.more_horiz_rounded, size: 27),
+                      ),
                     ],
                   ),
                   const Spacer(),
@@ -894,7 +904,18 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: <Widget>[
-                      IconButton(onPressed: () {}, icon: const Icon(Icons.shuffle_rounded, color: _muted, size: 23)),
+                      IconButton(
+                        tooltip: widget.handler.shuffleEnabled ? 'Turn shuffle off' : 'Shuffle queue',
+                        onPressed: () async {
+                          await widget.handler.toggleShuffle();
+                          if (mounted) setState(() {});
+                        },
+                        icon: Icon(
+                          Icons.shuffle_rounded,
+                          color: widget.handler.shuffleEnabled ? _mint : _muted,
+                          size: 23,
+                        ),
+                      ),
                       IconButton(onPressed: () => widget.handler.skipToPrevious(), icon: const Icon(Icons.skip_previous_rounded, size: 37)),
                       Container(
                         width: 68,
