@@ -17,10 +17,12 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   int _queueIndex = 0;
   int _loadGeneration = 0;
   bool _shuffleEnabled = false;
+  bool _repeatEnabled = false;
   List<MediaItem>? _unshuffledQueue;
   String? _lastPlaybackError;
 
   bool get shuffleEnabled => _shuffleEnabled;
+  bool get repeatEnabled => _repeatEnabled;
   String? get lastPlaybackError => _lastPlaybackError;
 
   FluxAudioHandler() {
@@ -104,7 +106,9 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     if (items.isEmpty) return;
     queue.add(List<MediaItem>.unmodifiable(items));
     _shuffleEnabled = false;
+    _repeatEnabled = false;
     _unshuffledQueue = null;
+    await _player.setLoopMode(LoopMode.off);
     final safeIndex = startIndex.clamp(0, items.length - 1).toInt();
     await skipToQueueItem(safeIndex);
   }
@@ -130,6 +134,12 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       _unshuffledQueue = null;
     }
     _shuffleEnabled = !_shuffleEnabled;
+    _publishPlaybackState();
+  }
+
+  Future<void> toggleRepeat() async {
+    _repeatEnabled = !_repeatEnabled;
+    await _player.setLoopMode(_repeatEnabled ? LoopMode.one : LoopMode.off);
     _publishPlaybackState();
   }
 
