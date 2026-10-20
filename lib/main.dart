@@ -686,12 +686,12 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _moodCard(String mood, int index) {
     const palettes = <List<Color>>[
-      <Color>[Color(0xFFE9D7B9), Color(0xFFDCC5A5)],
-      <Color>[Color(0xFFD5DCC5), Color(0xFFBFCDAF)],
-      <Color>[Color(0xFFE8D0C5), Color(0xFFDAB5A7)],
-      <Color>[Color(0xFFD0DCE8), Color(0xFFB6C8DB)],
-      <Color>[Color(0xFFE5D0D8), Color(0xFFD8B7C5)],
-      <Color>[Color(0xFFD7D6BA), Color(0xFFC6C6A1)],
+      <Color>[Color(0xFF252525), Color(0xFF1B1B1B)],
+      <Color>[Color(0xFF242821), Color(0xFF191D18)],
+      <Color>[Color(0xFF2B211F), Color(0xFF1E1817)],
+      <Color>[Color(0xFF20252B), Color(0xFF171B20)],
+      <Color>[Color(0xFF292127), Color(0xFF1D181D)],
+      <Color>[Color(0xFF28281F), Color(0xFF1B1B16)],
     ];
     const icons = <IconData>[
       Icons.local_fire_department_rounded,
@@ -804,12 +804,12 @@ class _MusicHomeState extends State<MusicHome> {
             const Text('Browse categories', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
             const SizedBox(height: 10),
             Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
-              _genreTile('Electronic', const Color(0xFFD9C8E9), 'electronic music'),
-              _genreTile('Chill', const Color(0xFFC5D5C1), 'chill music'),
-              _genreTile('Indie', const Color(0xFFE8C4B8), 'indie music'),
-              _genreTile('Focus', const Color(0xFFD3D5B7), 'focus music'),
-              _genreTile('Hip-hop', const Color(0xFFE8C4D0), 'hip hop'),
-              _genreTile('Ambient', const Color(0xFFC7D7E8), 'ambient music'),
+              _genreTile('Electronic', const Color(0xFF25202B), 'electronic music'),
+              _genreTile('Chill', const Color(0xFF202820), 'chill music'),
+              _genreTile('Indie', const Color(0xFF2A211F), 'indie music'),
+              _genreTile('Focus', const Color(0xFF29291E), 'focus music'),
+              _genreTile('Hip-hop', const Color(0xFF2A2026), 'hip hop'),
+              _genreTile('Ambient', const Color(0xFF20262B), 'ambient music'),
             ]),
             const SizedBox(height: 22),
             Row(children: <Widget>[
@@ -905,11 +905,11 @@ class _MusicHomeState extends State<MusicHome> {
         const SizedBox(height: 17),
         Container(
           height: 130, clipBehavior: Clip.antiAlias, padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFFE3D6C1), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFD8C8AF))),
+          decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF333333))),
           child: Stack(children: <Widget>[
             Positioned(right: -5, top: -15, child: Icon(Icons.favorite_rounded, size: 115, color: Colors.white.withValues(alpha: .13))),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-              const Text('YOUR COLLECTION', style: TextStyle(color: _muted, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
+              const Text('YOUR COLLECTION', style: TextStyle(color: _mint, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
               const Spacer(),
               Text(showingRecent ? 'Recently played' : 'Liked songs', style: const TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.4)),
               const SizedBox(height: 3),
@@ -1736,9 +1736,9 @@ class _Atmosphere extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: <Color>[
-                Color(0xFFF8F4EA),
-                Color(0xFFF2EBDD),
-                Color(0xFFFBF8F0),
+                Color(0xFF121212),
+                Color(0xFF151515),
+                Color(0xFF101010),
               ],
             ),
           ),
