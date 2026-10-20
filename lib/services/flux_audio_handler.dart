@@ -211,7 +211,13 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> play() async {
-    if (_lastPlaybackError != null) return;
+    // A tap on Play after a failed stream should resolve a fresh URL, not
+    // silently return while the old error remains set.
+    if (_lastPlaybackError != null) {
+      final current = mediaItem.value;
+      if (current != null) await _loadAndPlay(current);
+      return;
+    }
     try {
       await _player.play();
     } catch (error) {
