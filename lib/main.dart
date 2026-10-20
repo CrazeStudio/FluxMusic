@@ -32,7 +32,7 @@ Future<void> main() async {
       androidNotificationChannelName: 'FluxMusic playback',
       androidNotificationChannelDescription: 'Music playback controls',
       androidNotificationOngoing: true,
-      androidStopForegroundOnPause: false,
+      androidStopForegroundOnPause: true,
     ),
   );
   runApp(const FluxMusicApp());
