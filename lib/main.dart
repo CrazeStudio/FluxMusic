@@ -1210,6 +1210,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
   bool _normalization = true;
   bool _limiter = true;
   bool _drc = false;
+  bool _bassBoost = false;
   String? _note;
 
   Future<void> _set(String key, bool value) async {
@@ -1217,10 +1218,11 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       if (key == 'normalization') _normalization = value;
       if (key == 'limiter') _limiter = value;
       if (key == 'drc') _drc = value;
+      if (key == 'bassBoost') _bassBoost = value;
       _note = null;
     });
     try {
-      await _effects.invokeMethod<void>('setSettings', <String, Object>{'normalization': _normalization, 'limiter': _limiter, 'drc': _drc});
+      await _effects.invokeMethod<void>('setSettings', <String, Object>{'normalization': _normalization, 'limiter': _limiter, 'drc': _drc, 'bassBoost': _bassBoost});
       if (mounted) setState(() => _note = 'Audio settings updated.');
     } catch (_) {
       if (mounted) setState(() => _note = 'Start playback to apply effects on supported Android devices.');
@@ -1249,6 +1251,8 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       _tile(Icons.shield_rounded, 'Look-ahead limiter', 'Controls sudden peaks to help prevent clipping.', _limiter, (v) => _set('limiter', v)),
       const SizedBox(height: 9),
       _tile(Icons.compress_rounded, 'Dynamic range compression', 'Makes quieter details easier to hear in noisy places.', _drc, (v) => _set('drc', v)),
+      const SizedBox(height: 9),
+      _tile(Icons.speaker_rounded, 'Bass boost', 'Adds weight to low frequencies for bass-forward listening.', _bassBoost, (v) => _set('bassBoost', v)),
       if (_note != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_note!, style: const TextStyle(color: _muted, fontSize: 11))),
       const SizedBox(height: 12),
       const Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF737C96), fontSize: 10)),
