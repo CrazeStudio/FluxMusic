@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
@@ -12,6 +13,10 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   int _queueIndex = 0;
   int _loadGeneration = 0;
+  bool _shuffleEnabled = false;
+  List<MediaItem>? _unshuffledQueue;
+
+  bool get shuffleEnabled => _shuffleEnabled;
 
   FluxAudioHandler() {
     _player.playbackEventStream.listen(
@@ -65,8 +70,36 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }) async {
     if (items.isEmpty) return;
     queue.add(List<MediaItem>.unmodifiable(items));
-    final safeIndex = startIndex.clamp(0, items.length - 1);
+    _shuffleEnabled = false;
+    _unshuffledQueue = null;
+    final safeIndex = startIndex.clamp(0, items.length - 1).toInt();
     await skipToQueueItem(safeIndex);
+  }
+
+  /// Shuffles the queue while keeping the current item playing. Turning shuffle
+  /// off restores the order that was active when shuffle was enabled.
+  Future<void> toggleShuffle() async {
+    final current = mediaItem.value;
+    final currentQueue = queue.value;
+    if (current == null || currentQueue.length < 2) return;
+
+    if (!_shuffleEnabled) {
+      _unshuffledQueue = List<MediaItem>.of(currentQueue);
+      final shuffled = List<MediaItem>.of(currentQueue)
+        ..removeWhere((item) => item.id == current.id)
+        ..shuffle(Random());
+      shuffled.insert(0, current);
+      queue.add(List<MediaItem>.unmodifiable(shuffled));
+      _queueIndex = 0;
+    } else {
+      final restored = List<MediaItem>.of(_unshuffledQueue ?? currentQueue);
+      queue.add(List<MediaItem>.unmodifiable(restored));
+      final restoredIndex = restored.indexWhere((item) => item.id == current.id);
+      _queueIndex = restoredIndex < 0 ? 0 : restoredIndex;
+      _unshuffledQueue = null;
+    }
+    _shuffleEnabled = !_shuffleEnabled;
+    _publishPlaybackState();
   }
 
   @override
