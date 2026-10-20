@@ -1070,6 +1070,7 @@ class _MusicHomeState extends State<MusicHome> {
       },
     );
   }
+}
 
 class AudioEnhancementsSheet extends StatefulWidget {
   const AudioEnhancementsSheet({super.key});
