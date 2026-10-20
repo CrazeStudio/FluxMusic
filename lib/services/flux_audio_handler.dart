@@ -288,7 +288,6 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   void moveQueueItem(int oldIndex, int newIndex) {
     final items = List<MediaItem>.of(queue.value);
     if (oldIndex < 0 || oldIndex >= items.length) return;
-    if (newIndex > oldIndex) newIndex--;
     if (newIndex < 0 || newIndex >= items.length || newIndex == oldIndex) return;
     final current = _queueIndex >= 0 && _queueIndex < items.length
         ? items[_queueIndex]
