@@ -130,14 +130,26 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
             dynamicsProcessing = null
             if (limiterEnabled || drcEnabled) {
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                    val config = DynamicsProcessing.Config.Builder(
-                        DynamicsProcessing.VARIANT_FAVOR_FREQUENCY,
+                    val builder = DynamicsProcessing.Config.Builder(
+                        DynamicsProcessing.VARIANT_FAVOR_TIME_RESOLUTION,
                         2,
                         false, 0,
                         drcEnabled, if (drcEnabled) 1 else 0,
                         false, 0,
                         limiterEnabled
-                    ).build()
+                    )
+                    if (limiterEnabled) {
+                        builder.setLimiterAllChannelsTo(
+                            DynamicsProcessing.Limiter(true, true, 0, 2.0f, 80.0f, 20.0f, -1.0f, 0.0f)
+                        )
+                    }
+                    if (drcEnabled) {
+                        builder.setMbcBandAllChannelsTo(
+                            0,
+                            DynamicsProcessing.MbcBand(true, 20000.0f, 15.0f, 150.0f, 3.0f, -18.0f, 6.0f, -60.0f, 1.0f, -60.0f, 0.0f)
+                        )
+                    }
+                    val config = builder.build()
                     dynamicsProcessing = DynamicsProcessing(0, effectSessionId, config).apply { enabled = true }
                 }
             }
