@@ -1,0 +1,173 @@
+import 'dart:async';
+
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
+
+/// Owns playback independently of the Flutter screen, so audio and media
+/// controls keep working when the UI is backgrounded or the screen is locked.
+class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
+  final AudioPlayer _player = AudioPlayer();
+  final YoutubeExplode _youtube = YoutubeExplode();
+
+  int _queueIndex = 0;
+  int _loadGeneration = 0;
+
+  FluxAudioHandler() {
+    _player.playbackEventStream.listen(
+      (_) => _publishPlaybackState(),
+      onError: (Object error, StackTrace stackTrace) {
+        playbackState.add(playbackState.value.copyWith(
+          playing: false,
+          processingState: AudioProcessingState.error,
+          errorMessage: error.toString(),
+        ));
+      },
+    );
+    _player.playingStream.listen((_) => _publishPlaybackState());
+    _player.processingStateStream.listen((_) => _publishPlaybackState());
+  }
+
+  Stream<Duration> get positionStream => _player.positionStream;
+  Stream<Duration?> get durationStream => _player.durationStream;
+
+  void _publishPlaybackState() {
+    final processing = switch (_player.processingState) {
+      ProcessingState.idle => AudioProcessingState.idle,
+      ProcessingState.loading => AudioProcessingState.loading,
+      ProcessingState.buffering => AudioProcessingState.buffering,
+      ProcessingState.ready => AudioProcessingState.ready,
+      ProcessingState.completed => AudioProcessingState.completed,
+    };
+
+    playbackState.add(PlaybackState(
+      controls: <MediaControl>[
+        MediaControl.skipToPrevious,
+        if (_player.playing) MediaControl.pause else MediaControl.play,
+        MediaControl.skipToNext,
+        MediaControl.stop,
+      ],
+      androidCompactActionIndices: const <int>[0, 1, 2],
+      systemActions: const <MediaAction>{MediaAction.seek},
+      processingState: processing,
+      playing: _player.playing,
+      updatePosition: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      speed: _player.speed,
+      queueIndex: _queueIndex,
+    ));
+  }
+
+  /// Replaces the visible queue and starts at the requested item.
+  Future<void> playTracks(
+    List<MediaItem> items, {
+    int startIndex = 0,
+  }) async {
+    if (items.isEmpty) return;
+    queue.add(List<MediaItem>.unmodifiable(items));
+    final safeIndex = startIndex.clamp(0, items.length - 1);
+    await skipToQueueItem(safeIndex);
+  }
+
+  @override
+  Future<void> playMediaItem(MediaItem item) => _loadAndPlay(item);
+
+  Future<void> _loadAndPlay(MediaItem item) async {
+    final generation = ++_loadGeneration;
+    final videoId = (item.extras?['videoId'] as String?) ?? item.id;
+    if (videoId.trim().isEmpty) {
+      throw StateError('This track does not have a playable video ID.');
+    }
+
+    mediaItem.add(item);
+    playbackState.add(playbackState.value.copyWith(
+      processingState: AudioProcessingState.loading,
+      playing: false,
+    ));
+
+    try {
+      final manifest = await _youtube.videos.streams.getManifest(
+        videoId,
+        ytClients: <YoutubeApiClient>[
+          YoutubeApiClient.ios,
+          YoutubeApiClient.androidVr,
+        ],
+      );
+      final streams = manifest.audioOnly.toList()
+        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+      if (streams.isEmpty) {
+        throw StateError('No audio stream was offered for this track.');
+      }
+      if (generation != _loadGeneration) return;
+
+      await _player.setAudioSource(
+        AudioSource.uri(
+          streams.first.url,
+          tag: item,
+        ),
+      );
+      if (generation != _loadGeneration) return;
+      await play();
+    } catch (_) {
+      if (generation == _loadGeneration) {
+        playbackState.add(playbackState.value.copyWith(
+          playing: false,
+          processingState: AudioProcessingState.error,
+        ));
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> play() async => _player.play();
+
+  @override
+  Future<void> pause() => _player.pause();
+
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> skipToNext() async {
+    final items = queue.value;
+    if (items.isEmpty) return;
+    final next = (_queueIndex + 1) % items.length;
+    await skipToQueueItem(next);
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    if (_player.position > const Duration(seconds: 4)) {
+      await seek(Duration.zero);
+      return;
+    }
+    final items = queue.value;
+    if (items.isEmpty) return;
+    final previous = (_queueIndex - 1 + items.length) % items.length;
+    await skipToQueueItem(previous);
+  }
+
+  @override
+  Future<void> skipToQueueItem(int index) async {
+    final items = queue.value;
+    if (index < 0 || index >= items.length) return;
+    _queueIndex = index;
+    await _loadAndPlay(items[index]);
+  }
+
+  @override
+  Future<void> stop() async {
+    ++_loadGeneration;
+    await _player.stop();
+    mediaItem.add(null);
+    await super.stop();
+  }
+
+  /// Called by Flutter's lifecycle only when the service is genuinely done.
+  Future<void> disposePlayer() async {
+    ++_loadGeneration;
+    _youtube.close();
+    await _player.dispose();
+  }
+}
