@@ -150,12 +150,18 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     playbackState.add(PlaybackState(
       controls: <MediaControl>[
         MediaControl.skipToPrevious,
+        MediaControl.rewind,
         if (_player.playing) MediaControl.pause else MediaControl.play,
+        MediaControl.fastForward,
         MediaControl.skipToNext,
-        MediaControl.stop,
       ],
-      androidCompactActionIndices: const <int>[0, 1, 2],
-      systemActions: const <MediaAction>{MediaAction.seek},
+      // Android's compact notification keeps previous, play/pause, and next visible.
+      androidCompactActionIndices: const <int>[0, 2, 4],
+      systemActions: const <MediaAction>{
+        MediaAction.seek,
+        MediaAction.rewind,
+        MediaAction.fastForward,
+      },
       processingState: processing,
       playing: _lastPlaybackError == null && _player.playing,
       updatePosition: _player.position,
@@ -326,6 +332,19 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> rewind() async {
+    final target = _player.position - const Duration(seconds: 10);
+    await _player.seek(target < Duration.zero ? Duration.zero : target);
+  }
+
+  @override
+  Future<void> fastForward() async {
+    final target = _player.position + const Duration(seconds: 30);
+    final duration = _player.duration;
+    await _player.seek(duration != null && target > duration ? duration : target);
+  }
 
   @override
   Future<void> skipToNext() async {
