@@ -1366,45 +1366,102 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                 InkWell(
                   borderRadius: BorderRadius.circular(13),
                   onTap: () {
-                    final items = widget.handler.queue.value;
                     showModalBottomSheet<void>(
-                      context: context, isScrollControlled: true, useSafeArea: true, backgroundColor: Colors.transparent,
+                      context: context,
+                      isScrollControlled: true,
+                      useSafeArea: true,
+                      backgroundColor: Colors.transparent,
                       builder: (sheetContext) => Container(
                         height: MediaQuery.sizeOf(sheetContext).height * .7,
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                        decoration: const BoxDecoration(color: Color(0xFF121212), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF121212),
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
                         child: Column(children: <Widget>[
                           Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
                           const SizedBox(height: 16),
                           const Align(alignment: Alignment.centerLeft, child: Text('Up next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+                          const Align(alignment: Alignment.centerLeft, child: Text('Hold to reorder · swipe to remove', style: TextStyle(color: _playerMuted, fontSize: 11))),
                           const SizedBox(height: 8),
-                          Expanded(child: ListView.builder(itemCount: items.length, itemBuilder: (_, index) {
-                            final queued = items[index];
-                            final current = queued.id == item.id;
-                            return ListTile(contentPadding: EdgeInsets.zero,
-                              leading: _CoverArt(url: queued.extras?['thumbnailUrl'] as String? ?? '', size: 46, radius: 9),
-                              title: Text(queued.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: current ? FontWeight.w800 : FontWeight.w500)),
-                              subtitle: Text(queued.artist ?? 'Unknown artist', maxLines: 1, style: const TextStyle(color: _playerMuted, fontSize: 11)),
-                              trailing: current ? const Icon(Icons.equalizer_rounded, color: _mint) : null,
-                              onTap: () { Navigator.of(sheetContext).pop(); widget.handler.skipToQueueItem(index); },
-                            );
-                          })),
+                          Expanded(
+                            child: StreamBuilder<List<MediaItem>>(
+                              stream: widget.handler.queue,
+                              initialData: widget.handler.queue.value,
+                              builder: (context, queueSnapshot) {
+                                final items = queueSnapshot.data ?? const <MediaItem>[];
+                                if (items.isEmpty) {
+                                  return const _EmptyState(
+                                    icon: Icons.queue_music_rounded,
+                                    title: 'Queue is empty',
+                                    subtitle: 'Use a track’s menu to add songs to your queue.',
+                                  );
+                                }
+                                return ReorderableListView.builder(
+                                  itemCount: items.length,
+                                  onReorder: widget.handler.moveQueueItem,
+                                  itemBuilder: (context, index) {
+                                    final queued = items[index];
+                                    final current = index == widget.handler.currentQueueIndex;
+                                    return Dismissible(
+                                      key: ObjectKey(queued),
+                                      direction: current ? DismissDirection.none : DismissDirection.endToStart,
+                                      confirmDismiss: (_) async => index != widget.handler.currentQueueIndex,
+                                      onDismissed: (_) => widget.handler.removeQueueItemAt(index),
+                                      background: Container(
+                                        alignment: Alignment.centerRight,
+                                        padding: const EdgeInsets.only(right: 18),
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF3A2024),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFFA7B5)),
+                                      ),
+                                      child: ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: _CoverArt(url: queued.extras?['thumbnailUrl'] as String? ?? '', size: 46, radius: 9),
+                                        title: Text(
+                                          queued.title,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontSize: 13, fontWeight: current ? FontWeight.w800 : FontWeight.w500),
+                                        ),
+                                        subtitle: Text(queued.artist ?? 'Unknown artist', maxLines: 1, style: const TextStyle(color: _playerMuted, fontSize: 11)),
+                                        trailing: current ? const Icon(Icons.equalizer_rounded, color: _mint) : const Icon(Icons.drag_handle_rounded, color: _playerMuted),
+                                        onTap: () {
+                                          Navigator.of(sheetContext).pop();
+                                          widget.handler.skipToQueueItem(index);
+                                        },
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ),
                         ]),
                       ),
                     );
                   },
-                  child: Container(height: 50, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(13)),
+                  child: Container(
+                    height: 50,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(13)),
                     child: Row(children: <Widget>[
-                      const Icon(Icons.queue_music_rounded, color: _playerMuted, size: 20), const SizedBox(width: 12),
+                      const Icon(Icons.queue_music_rounded, color: _playerMuted, size: 20),
+                      const SizedBox(width: 12),
                       const Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                         Text('Up next', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                        SizedBox(height: 2), Text('Your playback queue', style: TextStyle(color: _playerMuted, fontSize: 10)),
+                        SizedBox(height: 2),
+                        Text('Your playback queue', style: TextStyle(color: _playerMuted, fontSize: 10)),
                       ])),
                       Text('${widget.handler.queue.value.length} songs', style: const TextStyle(color: _playerMuted, fontSize: 10)),
-                      const SizedBox(width: 8), const Icon(Icons.chevron_right_rounded, color: _playerMuted, size: 20),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right_rounded, color: _playerMuted, size: 20),
                     ]),
                   ),
-                ),
+                )
               ]),
               ),
             ));
