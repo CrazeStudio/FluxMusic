@@ -114,6 +114,7 @@ class _MusicHomeState extends State<MusicHome> {
   String _lastQuery = '';
   List<Track> _results = <Track>[];
   final Map<String, List<Track>> _searchCache = <String, List<Track>>{};
+  bool _notificationPermissionHandled = false;
   int _searchGeneration = 0;
   List<Track> _favorites = <Track>[];
   List<Track> _recent = <Track>[];
@@ -132,7 +133,6 @@ class _MusicHomeState extends State<MusicHome> {
   void initState() {
     super.initState();
     _initialize();
-    Permission.notification.request();
   }
 
   Future<void> _initialize() async {
@@ -304,8 +304,54 @@ class _MusicHomeState extends State<MusicHome> {
     await prefs.remove('fluxmusic.search_history.v1');
   }
 
+  Future<void> _requestNotificationPermissionInContext() async {
+    if (_notificationPermissionHandled) return;
+    _notificationPermissionHandled = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('fluxmusic.notification_permission_prompted.v1') ?? false) return;
+      final status = await Permission.notification.status;
+      if (status.isGranted) {
+        await prefs.setBool('fluxmusic.notification_permission_prompted.v1', true);
+        return;
+      }
+      if (!mounted) return;
+      final shouldRequest = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Text('Keep playback controls available'),
+          content: const Text('Notifications let FluxMusic show playback controls on your lock screen and notification shade while music plays. You can continue without allowing them.'),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Not now')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: _ink),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Allow notifications'),
+            ),
+          ],
+        ),
+      );
+      if (shouldRequest == true) {
+        final result = await Permission.notification.request();
+        if (!result.isGranted && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Playback will continue, but Android may hide notification controls. You can enable notifications in system settings.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+      await prefs.setBool('fluxmusic.notification_permission_prompted.v1', true);
+    } catch (_) {
+      // Permission APIs vary by Android version and OEM; never block playback.
+    }
+  }
+
   Future<void> _playList(List<Track> tracks, int index) async {
     if (tracks.isEmpty || index < 0 || index >= tracks.length) return;
+    await _requestNotificationPermissionInContext();
 
     // Keep stream/playback errors separate from history persistence errors.
     // A preferences failure must not be reported as a failed audio stream.
@@ -710,7 +756,7 @@ class _MusicHomeState extends State<MusicHome> {
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () => _search(mood == 'Trending now' ? 'trending music 2026' : mood),
+          onTap: () => _search(mood == 'Trending now' ? 'trending music ${DateTime.now().year}' : mood),
           child: Ink(
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
@@ -1192,6 +1238,7 @@ class NowPlayingSheet extends StatefulWidget {
 class _NowPlayingSheetState extends State<NowPlayingSheet> {
   bool _liked = false;
   String? _likedTrackId;
+  double? _dragPositionMs;
 
   @override
   Widget build(BuildContext context) {
@@ -1220,7 +1267,8 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
               height: MediaQuery.sizeOf(context).height * .96,
               padding: const EdgeInsets.fromLTRB(20, 9, 20, 18),
               decoration: const BoxDecoration(color: Color(0xFF121212), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-              child: Column(children: <Widget>[
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
                 Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white.withValues(alpha: .2), borderRadius: BorderRadius.circular(8))),
                 const SizedBox(height: 10),
                 Row(children: <Widget>[
@@ -1270,10 +1318,16 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   ),
                 ]),
                 const SizedBox(height: 10),
-                Expanded(child: Center(child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 314, maxHeight: MediaQuery.sizeOf(context).height * .39),
-                  child: AspectRatio(aspectRatio: 1, child: _CoverArt(url: item.extras?['thumbnailUrl'] as String? ?? '', size: 314, radius: 16)),
-                ))),
+                SizedBox(
+                  height: (MediaQuery.sizeOf(context).height * .28).clamp(96.0, 240.0).toDouble(),
+                  child: Center(
+                    child: _CoverArt(
+                      url: item.extras?['thumbnailUrl'] as String? ?? '',
+                      size: (MediaQuery.sizeOf(context).height * .28).clamp(96.0, 240.0).toDouble(),
+                      radius: 16,
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Row(children: <Widget>[
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
@@ -1286,6 +1340,25 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                     if (mounted) setState(() => _liked = widget.isFavorite(track));
                   }, icon: Icon(_liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: _liked ? _mint : _playerMuted, size: 25)),
                 ]),
+                ValueListenableBuilder<Duration?>(
+                  valueListenable: widget.handler.sleepTimerRemaining,
+                  builder: (context, remaining, _) {
+                    if (remaining == null) return const SizedBox.shrink();
+                    return Align(
+                      alignment: Alignment.centerLeft,
+                      child: ActionChip(
+                        avatar: const Icon(Icons.timer_outlined, color: _mint, size: 17),
+                        backgroundColor: const Color(0xFF202020),
+                        side: BorderSide(color: _mint.withValues(alpha: .4)),
+                        label: Text(
+                          'Sleep timer · ${_formatTime(remaining)}',
+                          style: const TextStyle(color: _ink, fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                        onPressed: () => widget.handler.setSleepTimer(null),
+                      ),
+                    );
+                  },
+                ),
                 const SizedBox(height: 8),
                 StreamBuilder<Duration>(
                   stream: widget.handler.positionStream, initialData: Duration.zero,
@@ -1296,11 +1369,27 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                       builder: (context, durationSnapshot) {
                         final duration = durationSnapshot.data ?? Duration.zero;
                         final maxMs = duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0;
-                        final value = position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
+                        final liveValue = position.inMilliseconds.clamp(0, maxMs.toInt()).toDouble();
+                        final value = (_dragPositionMs ?? liveValue).clamp(0.0, maxMs);
+                        final shownPosition = Duration(milliseconds: value.round());
                         return Column(children: <Widget>[
-                          Slider(min: 0, max: maxMs, value: value, onChanged: duration == Duration.zero ? null : (next) => widget.handler.seek(Duration(milliseconds: next.round()))),
+                          Slider(
+                            min: 0,
+                            max: maxMs,
+                            value: value,
+                            onChanged: duration == Duration.zero ? null : (next) {
+                              setState(() => _dragPositionMs = next);
+                            },
+                            onChangeEnd: duration == Duration.zero ? null : (next) async {
+                              try {
+                                await widget.handler.seek(Duration(milliseconds: next.round()));
+                              } finally {
+                                if (mounted) setState(() => _dragPositionMs = null);
+                              }
+                            },
+                          ),
                           Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: <Widget>[
-                            Text(_formatTime(position), style: const TextStyle(color: _playerMuted, fontSize: 10)),
+                            Text(_formatTime(_dragPositionMs == null ? position : shownPosition), style: const TextStyle(color: _playerMuted, fontSize: 10)),
                             Text(_formatTime(duration), style: const TextStyle(color: _playerMuted, fontSize: 10)),
                           ])),
                         ]);
@@ -1320,7 +1409,22 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   IconButton(onPressed: () => widget.handler.skipToPrevious(), icon: const Icon(Icons.skip_previous_rounded, size: 29)),
                   Container(width: 62, height: 62, decoration: const BoxDecoration(shape: BoxShape.circle, color: _mint), child: IconButton(onPressed: () => playing ? widget.handler.pause() : widget.handler.play(), icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: _ink, size: 34))),
                   IconButton(onPressed: () => widget.handler.skipToNext(), icon: const Icon(Icons.skip_next_rounded, size: 29)),
-                  IconButton(tooltip: widget.handler.repeatEnabled ? 'Turn repeat off' : 'Repeat current track', onPressed: () async { await widget.handler.toggleRepeat(); if (mounted) setState(() {}); }, icon: Icon(Icons.repeat_one_rounded, color: widget.handler.repeatEnabled ? _mint : _playerMuted, size: 21)),
+                  IconButton(
+                    tooltip: switch (widget.handler.repeatMode) {
+                      FluxRepeatMode.off => 'Repeat off · tap for repeat all',
+                      FluxRepeatMode.all => 'Repeat all · tap for repeat one',
+                      FluxRepeatMode.one => 'Repeat one · tap to turn off',
+                    },
+                    onPressed: () async {
+                      await widget.handler.toggleRepeat();
+                      if (mounted) setState(() {});
+                    },
+                    icon: Icon(
+                      widget.handler.repeatMode == FluxRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
+                      color: widget.handler.repeatMode == FluxRepeatMode.off ? _playerMuted : _mint,
+                      size: 21,
+                    ),
+                  ),
                 ]),
                 const SizedBox(height: 8),
                 InkWell(
@@ -1381,6 +1485,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   ),
                 ),
               ]),
+              ),
             ));
           },
         );
