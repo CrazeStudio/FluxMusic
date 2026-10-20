@@ -17,7 +17,6 @@ late final FluxAudioHandler fluxAudio;
 
 const _ink = Color(0xFFF5F5F5);
 const _cardInk = Color(0xFF29261F);
-const _panel = Color(0xFF1E1E1E);
 const _mint = Color(0xFF777B43);
 const _violet = Color(0xFFB9796A);
 const _muted = Color(0xFFB0B0B0);
@@ -119,15 +118,6 @@ class _MusicHomeState extends State<MusicHome> {
   List<Track> _favorites = <Track>[];
   List<Track> _recent = <Track>[];
   List<String> _searchHistory = <String>[];
-
-  static const List<String> _moods = <String>[
-    'Trending now',
-    'Anime openings',
-    'Lofi for focus',
-    'Indian indie',
-    'Arijit Singh',
-    'Night drive',
-  ];
 
   @override
   void initState() {
@@ -495,35 +485,6 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _topBarAction({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool highlighted = false,
-  }) {
-    final tint = highlighted ? _mint : Colors.white;
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: highlighted ? _mint.withValues(alpha: .10) : Colors.white.withValues(alpha: .045),
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: highlighted ? _mint.withValues(alpha: .20) : Colors.white.withValues(alpha: .07)),
-            ),
-            child: Icon(icon, color: tint, size: 21),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _discover() {
     final recent = _recent.take(10).toList();
     return ListView(
@@ -669,22 +630,6 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _quickChip(String label, String query, {bool selected = false}) {
-    return Material(
-      color: selected ? const Color(0xFF2A2A2A) : const Color(0xFF1E1E1E),
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: () => _search(query),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: selected ? _mint.withValues(alpha: .45) : const Color(0xFF333333))),
-          child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: selected ? _ink : _muted)),
-        ),
-      ),
-    );
-  }
-
   Widget _recentTrackRow(Track track, int index) {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -704,31 +649,6 @@ class _MusicHomeState extends State<MusicHome> {
       ),
     );
   } 
-
-  Widget _featureCard() {
-    return Container(
-      height: 166,
-      clipBehavior: Clip.antiAlias,
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF333333))),
-      child: Row(children: <Widget>[
-        const _DecorativeArt(size: 122, variant: 0),
-        const SizedBox(width: 13),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-          const Text('YOUR DAILY MIX', style: TextStyle(color: _mint, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
-          const Spacer(),
-          const Text('A little more\nyou.', style: TextStyle(color: _ink, fontSize: 22, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -.55)),
-          const SizedBox(height: 7),
-          const Text('Fresh sounds for your day', maxLines: 2, style: TextStyle(color: _muted, fontSize: 10, height: 1.3)),
-          const Spacer(),
-          Align(alignment: Alignment.centerRight, child: Material(
-            color: _mint, shape: const CircleBorder(),
-            child: InkWell(customBorder: const CircleBorder(), onTap: () => _search('new music mix'), child: const SizedBox(width: 38, height: 38, child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24))),
-          )),
-        ])),
-      ]),
-    );
-  }
 
   Widget _moodCard(String mood, int index) {
     const palettes = <List<Color>>[
@@ -911,32 +831,6 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _searchSuggestion(String label, IconData icon, String query) {
-    return Material(
-      color: Colors.white.withValues(alpha: .045),
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => _search(query),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: .07)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(icon, color: _mint, size: 14),
-              const SizedBox(width: 6),
-              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _libraryPage() {
     final showingRecent = _libraryFilter == 1;
     final visibleTracks = showingRecent ? _recent : _favorites;
@@ -1030,16 +924,6 @@ class _MusicHomeState extends State<MusicHome> {
           contentPadding: const EdgeInsets.symmetric(vertical: 17, horizontal: 10),
         ),
       ),
-    );
-  }
-
-  Widget _sectionHeading(String title, String overline) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: <Widget>[
-        Expanded(child: Text(title, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3))),
-        Text(overline, style: const TextStyle(color: _muted, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1.3)),
-      ],
     );
   }
 
@@ -1851,20 +1735,6 @@ class _Atmosphere extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Glow extends StatelessWidget {
-  const _Glow({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(shape: BoxShape.circle, boxShadow: <BoxShadow>[BoxShadow(color: color, blurRadius: 90, spreadRadius: 20)]),
-      );
 }
 
 class _EmptyState extends StatelessWidget {
