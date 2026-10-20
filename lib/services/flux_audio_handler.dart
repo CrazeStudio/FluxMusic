@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:flutter/services.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 /// Background audio service. Stream resolution is unofficial and may break
@@ -11,6 +12,7 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   final YoutubeExplode _youtube = YoutubeExplode();
+  static const MethodChannel _audioEffects = MethodChannel('dev.crazestudio.fluxmusic/audio_effects');
 
   int _queueIndex = 0;
   int _loadGeneration = 0;
@@ -178,6 +180,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
             if (generation != _loadGeneration) return;
             _lastPlaybackError = null;
             _publishPlaybackState();
+            unawaited(_attachAudioEffects());
             unawaited(_playSafely(generation));
             return;
           } catch (error) {
@@ -198,6 +201,17 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         errorMessage: _lastPlaybackError,
       ));
       throw StateError(_lastPlaybackError!);
+    }
+  }
+
+  Future<void> _attachAudioEffects() async {
+    try {
+      final sessionId = await _player.androidAudioSessionId;
+      if (sessionId != null && sessionId > 0) {
+        await _audioEffects.invokeMethod<void>('attachSession', <String, int>{'sessionId': sessionId});
+      }
+    } catch (_) {
+      // Unsupported devices continue playback without platform enhancements.
     }
   }
 
