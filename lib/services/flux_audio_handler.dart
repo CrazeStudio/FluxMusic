@@ -33,6 +33,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   String? _lastPlaybackError;
 
   bool get shuffleEnabled => _shuffleEnabled;
+  int get currentQueueIndex => _queueIndex;
   bool get repeatEnabled => _repeatMode != FluxRepeatMode.off;
   FluxRepeatMode get repeatMode => _repeatMode;
   String? get lastPlaybackError => _lastPlaybackError;
