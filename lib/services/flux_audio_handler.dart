@@ -215,7 +215,14 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     // silently return while the old error remains set.
     if (_lastPlaybackError != null) {
       final current = mediaItem.value;
-      if (current != null) await _loadAndPlay(current);
+      if (current != null) {
+        try {
+          await _loadAndPlay(current);
+        } catch (_) {
+          // _loadAndPlay already publishes a readable error in playbackState.
+          // Keep the tap handler from leaking an unhandled async exception.
+        }
+      }
       return;
     }
     try {
