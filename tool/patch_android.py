@@ -92,7 +92,9 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
     private var normalizationEnabled = true
     private var limiterEnabled = true
     private var drcEnabled = false
+    private var bassBoostEnabled = false
     private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var bassBoost: BassBoost? = null
     private var dynamicsProcessing: DynamicsProcessing? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -109,6 +111,7 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
                     normalizationEnabled = call.argument<Boolean>("normalization") ?: true
                     limiterEnabled = call.argument<Boolean>("limiter") ?: true
                     drcEnabled = call.argument<Boolean>("drc") ?: false
+                    bassBoostEnabled = call.argument<Boolean>("bassBoost") ?: false
                     applyAudioEffects()
                     result.success(null)
                 }
@@ -170,6 +173,7 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
 
     override fun onDestroy() {
         loudnessEnhancer?.release()
+        bassBoost?.release()
         dynamicsProcessing?.release()
         super.onDestroy()
     }
