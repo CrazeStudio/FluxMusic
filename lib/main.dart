@@ -344,22 +344,22 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _topBar() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 18, 14),
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 12),
       child: Row(
         children: <Widget>[
           Container(
-            width: 48,
-            height: 48,
-            padding: const EdgeInsets.all(1),
+            width: 46,
+            height: 46,
+            padding: const EdgeInsets.all(1.2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              gradient: LinearGradient(
-                colors: <Color>[_mint.withValues(alpha: .9), _violet.withValues(alpha: .65)],
+              gradient: const LinearGradient(
+                colors: <Color>[_mint, _violet],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               boxShadow: <BoxShadow>[
-                BoxShadow(color: _mint.withValues(alpha: .09), blurRadius: 18, offset: const Offset(0, 5)),
+                BoxShadow(color: _mint.withValues(alpha: .12), blurRadius: 20, offset: const Offset(0, 5)),
               ],
             ),
             child: ClipRRect(
@@ -367,46 +367,79 @@ class _MusicHomeState extends State<MusicHome> {
               child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.cover),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                Text('FluxMusic', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -.8)),
+                Text('FluxMusic', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: -.9)),
                 SizedBox(height: 3),
                 Row(
                   children: <Widget>[
                     Icon(Icons.graphic_eq_rounded, size: 12, color: _mint),
                     SizedBox(width: 5),
-                    Text('MUSIC FOR YOUR MOMENT', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: _muted, letterSpacing: 1.15)),
+                    Flexible(
+                      child: Text(
+                        'YOUR SOUND. NO LIMITS.',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: _muted, letterSpacing: 1.05),
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
           ),
-          Material(
-            color: Colors.white.withValues(alpha: .055),
-            borderRadius: BorderRadius.circular(15),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(15),
-              onTap: () => setState(() => _tab = 1),
-              child: Container(
-                width: 45,
-                height: 45,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.white.withValues(alpha: .075)),
-                ),
-                child: const Icon(Icons.search_rounded, color: Colors.white, size: 23),
-              ),
-            ),
+          const SizedBox(width: 8),
+          _topBarAction(
+            icon: Icons.tune_rounded,
+            label: 'Audio enhancements',
+            highlighted: true,
+            onTap: _openAudioEnhancements,
+          ),
+          const SizedBox(width: 7),
+          _topBarAction(
+            icon: Icons.search_rounded,
+            label: 'Search music',
+            onTap: () => setState(() => _tab = 1),
           ),
         ],
       ),
     );
   }
 
-  Widget _discover() {
+  Widget _topBarAction({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool highlighted = false,
+  }) {
+    final tint = highlighted ? _mint : Colors.white;
+    return Tooltip(
+      message: label,
+      child: Material(
+        color: highlighted ? _mint.withValues(alpha: .10) : Colors.white.withValues(alpha: .045),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: highlighted ? _mint.withValues(alpha: .20) : Colors.white.withValues(alpha: .07)),
+            ),
+            child: Icon(icon, color: tint, size: 21),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _discover() {  Widget _discover() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 26),
       children: <Widget>[
@@ -711,16 +744,53 @@ class _MusicHomeState extends State<MusicHome> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 3, 20, 18),
+          padding: const EdgeInsets.fromLTRB(18, 5, 18, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text('Find your next loop.', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, letterSpacing: -1)),
-              const SizedBox(height: 14),
+              Row(
+                children: <Widget>[
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(color: _mint, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 7),
+                  const Text(
+                    'YOUR NEXT FAVOURITE',
+                    style: TextStyle(color: _mint, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.6),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.graphic_eq_rounded, color: _muted, size: 17),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Text('Search the\nsoundtrack.', style: TextStyle(fontSize: 31, height: 1.02, fontWeight: FontWeight.w900, letterSpacing: -1.25)),
+              const SizedBox(height: 8),
+              const Text('Songs, artists and sounds on your mind.', style: TextStyle(color: _muted, fontSize: 12.5)),
+              const SizedBox(height: 16),
               _searchBox(hint: 'Search songs or artists', onSubmitted: _search),
               const SizedBox(height: 12),
               if (_lastQuery.isNotEmpty)
-                Text('RESULTS FOR  “${_lastQuery.toUpperCase()}”', style: const TextStyle(color: _muted, fontSize: 10, letterSpacing: 1.3, fontWeight: FontWeight.w800)),
+                Text(
+                  'RESULTS FOR  “${_lastQuery.toUpperCase()}”',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _muted, fontSize: 10, letterSpacing: 1.2, fontWeight: FontWeight.w800),
+                )
+              else
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: <Widget>[
+                      _searchSuggestion('Trending', Icons.local_fire_department_rounded, 'trending music 2026'),
+                      const SizedBox(width: 8),
+                      _searchSuggestion('Anime', Icons.bolt_rounded, 'anime openings'),
+                      const SizedBox(width: 8),
+                      _searchSuggestion('Lofi', Icons.spa_rounded, 'lofi for focus'),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -736,7 +806,7 @@ class _MusicHomeState extends State<MusicHome> {
                           subtitle: 'Search a track, an artist, or a lyric you remember.',
                         )
                       : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
                           itemCount: _results.length,
                           itemBuilder: (_, index) => _trackTile(_results[index], index, _results),
                         ),
@@ -745,13 +815,61 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _libraryPage() {
+  Widget _searchSuggestion(String label, IconData icon, String query) {
+    return Material(
+      color: Colors.white.withValues(alpha: .045),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => _search(query),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: .07)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(icon, color: _mint, size: 14),
+              const SizedBox(width: 6),
+              Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _libraryPage() {  Widget _libraryPage() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
       children: <Widget>[
-        const Text('Your library', style: TextStyle(fontSize: 29, fontWeight: FontWeight.w900, letterSpacing: -1)),
-        const SizedBox(height: 6),
-        const Text('The tracks you keep close.', style: TextStyle(color: _muted)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const Text('Your library', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1.1)),
+                  const SizedBox(height: 6),
+                  const Text('The tracks you keep close.', style: TextStyle(color: _muted, fontSize: 12.5)),
+                ],
+              ),
+            ),
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: _mint.withValues(alpha: .09),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _mint.withValues(alpha: .17)),
+              ),
+              child: const Icon(Icons.library_music_rounded, color: _mint, size: 24),
+            ),
+          ],
+        ),
         const SizedBox(height: 22),
         Container(
           padding: const EdgeInsets.all(17),
