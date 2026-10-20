@@ -1512,6 +1512,47 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> with SingleTickerProv
                     ],
                   ),
                   const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: .045),
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: Colors.white.withValues(alpha: .07)),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        const Icon(Icons.speed_rounded, color: _mint, size: 19),
+                        const SizedBox(width: 9),
+                        const Expanded(child: Text('Playback speed', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+                        PopupMenuButton<double>(
+                          tooltip: 'Change playback speed',
+                          onSelected: (speed) => widget.handler.setSpeed(speed),
+                          color: const Color(0xFF20263A),
+                          itemBuilder: (_) => <PopupMenuEntry<double>>[
+                            for (final speed in <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0])
+                              PopupMenuItem<double>(
+                                value: speed,
+                                child: Row(
+                                  children: <Widget>[
+                                    if ((playback?.speed ?? 1.0) == speed) const Icon(Icons.check_rounded, color: _mint, size: 17) else const SizedBox(width: 17),
+                                    const SizedBox(width: 9),
+                                    Text('${speed.toStringAsFixed(speed == speed.roundToDouble() ? 0 : 2)}×'),
+                                  ],
+                                ),
+                              ),
+                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+                            child: Text(
+                              '${(playback?.speed ?? 1.0).toStringAsFixed((playback?.speed ?? 1.0) == (playback?.speed ?? 1.0).roundToDouble() ? 0 : 2)}×',
+                              style: const TextStyle(color: _mint, fontSize: 13, fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   const Text('Audio controls stay available from your notification and lock screen.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF69728B), fontSize: 10)),
                 ],
               ),
