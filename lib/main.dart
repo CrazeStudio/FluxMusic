@@ -1034,7 +1034,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
         ])),
       ]),
       const SizedBox(height: 18),
-      _tile(Icons.equalizer_rounded, 'Normalization', 'Balances perceived loudness between tracks.', _normalization, (v) => _set('normalization', v)),
+      _tile(Icons.equalizer_rounded, 'Normalization', 'Android loudness compensation; per-track LUFS matching is not available yet.', _normalization, (v) => _set('normalization', v)),
       const SizedBox(height: 9),
       _tile(Icons.shield_rounded, 'Look-ahead limiter', 'Controls sudden peaks to help prevent clipping.', _limiter, (v) => _set('limiter', v)),
       const SizedBox(height: 9),
