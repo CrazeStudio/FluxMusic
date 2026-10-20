@@ -338,6 +338,10 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
+  void _openAudioEnhancements() {
+    showModalBottomSheet<void>(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, useSafeArea: true, builder: (_) => const AudioEnhancementsSheet());
+  }
+
   Widget _topBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 18, 14),
@@ -982,6 +986,79 @@ class _MusicHomeState extends State<MusicHome> {
       },
     );
   }
+}
+
+
+class AudioEnhancementsSheet extends StatefulWidget {
+  const AudioEnhancementsSheet({super.key});
+  @override
+  State<AudioEnhancementsSheet> createState() => _AudioEnhancementsSheetState();
+}
+
+class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
+  static const MethodChannel _effects = MethodChannel('dev.crazestudio.fluxmusic/audio_effects');
+  bool _normalization = true;
+  bool _limiter = true;
+  bool _drc = false;
+  String? _note;
+
+  Future<void> _set(String key, bool value) async {
+    setState(() {
+      if (key == 'normalization') _normalization = value;
+      if (key == 'limiter') _limiter = value;
+      if (key == 'drc') _drc = value;
+      _note = null;
+    });
+    try {
+      await _effects.invokeMethod<void>('setSettings', <String, Object>{'normalization': _normalization, 'limiter': _limiter, 'drc': _drc});
+      if (mounted) setState(() => _note = 'Audio settings updated.');
+    } catch (_) {
+      if (mounted) setState(() => _note = 'Start playback to apply effects on supported Android devices.');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(22, 12, 22, 28),
+    decoration: const BoxDecoration(color: Color(0xFF101526), borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
+    child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+      Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
+      const SizedBox(height: 22),
+      const Row(children: <Widget>[
+        Icon(Icons.graphic_eq_rounded, color: _mint, size: 32),
+        SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+          Text('Audio enhancements', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+          SizedBox(height: 4),
+          Text('Cleaner sound, controlled peaks.', style: TextStyle(color: _muted, fontSize: 12)),
+        ])),
+      ]),
+      const SizedBox(height: 18),
+      _tile(Icons.equalizer_rounded, 'Normalization', 'Balances perceived loudness between tracks.', _normalization, (v) => _set('normalization', v)),
+      const SizedBox(height: 9),
+      _tile(Icons.shield_rounded, 'Look-ahead limiter', 'Controls sudden peaks to help prevent clipping.', _limiter, (v) => _set('limiter', v)),
+      const SizedBox(height: 9),
+      _tile(Icons.compress_rounded, 'Dynamic range compression', 'Makes quieter details easier to hear in noisy places.', _drc, (v) => _set('drc', v)),
+      if (_note != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_note!, style: const TextStyle(color: _muted, fontSize: 11))),
+      const SizedBox(height: 12),
+      const Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF737C96), fontSize: 10)),
+    ]),
+  );
+
+  Widget _tile(IconData icon, String title, String subtitle, bool value, ValueChanged<bool> onChanged) => Container(
+    padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+    decoration: BoxDecoration(color: const Color(0xFF191F32), borderRadius: BorderRadius.circular(17), border: Border.all(color: Colors.white.withValues(alpha: .055))),
+    child: Row(children: <Widget>[
+      Icon(icon, color: _mint, size: 24),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+        Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 4),
+        Text(subtitle, style: const TextStyle(fontSize: 10.5, color: _muted, height: 1.35)),
+      ])),
+      Switch.adaptive(value: value, activeColor: _mint, onChanged: onChanged),
+    ]),
+  );
 }
 
 class NowPlayingSheet extends StatefulWidget {
