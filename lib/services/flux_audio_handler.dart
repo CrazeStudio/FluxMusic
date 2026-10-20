@@ -300,7 +300,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   }
 
   @override
-  Future<void> playMediaItem(MediaItem item) => _loadAndPlay(item);
+  Future<void> playMediaItem(MediaItem mediaItem) => _loadAndPlay(mediaItem);
 
   Future<void> _loadAndPlay(MediaItem item) async {
     final generation = ++_loadGeneration;
@@ -370,7 +370,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   Future<void> _attachAudioEffects() async {
     try {
-      final sessionId = await _player.androidAudioSessionId;
+      final sessionId = _player.androidAudioSessionId;
       if (sessionId != null && sessionId > 0) {
         await _audioEffects.invokeMethod<void>('attachSession', <String, int>{'sessionId': sessionId});
       }
@@ -414,6 +414,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> setSpeed(double speed) => _player.setSpeed(speed);
 
+  @override
   Future<void> pause() => _player.pause();
 
   @override
