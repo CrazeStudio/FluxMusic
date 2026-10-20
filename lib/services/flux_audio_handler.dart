@@ -13,6 +13,10 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   final YoutubeExplode _youtube = YoutubeExplode();
   static const MethodChannel _audioEffects = MethodChannel('dev.crazestudio.fluxmusic/audio_effects');
+  final Map<String, _CandidateCacheEntry> _candidateCache = <String, _CandidateCacheEntry>{};
+  final Map<String, Future<List<dynamic>>> _candidateRequests = <String, Future<List<dynamic>>>{};
+  Timer? _sleepTimer;
+  DateTime? _sleepTimerEndsAt;
 
   int _queueIndex = 0;
   int _loadGeneration = 0;
@@ -24,6 +28,66 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   bool get shuffleEnabled => _shuffleEnabled;
   bool get repeatEnabled => _repeatEnabled;
   String? get lastPlaybackError => _lastPlaybackError;
+  DateTime? get sleepTimerEndsAt => _sleepTimerEndsAt;
+
+  void setSleepTimer(Duration? duration) {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimerEndsAt = null;
+    if (duration == null || duration <= Duration.zero) return;
+    _sleepTimerEndsAt = DateTime.now().add(duration);
+    _sleepTimer = Timer(duration, () {
+      _sleepTimer = null;
+      _sleepTimerEndsAt = null;
+      unawaited(pause());
+    });
+  }
+
+  Future<List<dynamic>> _resolveAudioCandidates(String videoId) {
+    final now = DateTime.now();
+    final cached = _candidateCache[videoId];
+    if (cached != null && cached.expiresAt.isAfter(now)) {
+      return Future<List<dynamic>>.value(cached.candidates);
+    }
+    final pending = _candidateRequests[videoId];
+    if (pending != null) return pending;
+
+    final request = _youtube.videos.streams
+        .getManifest(videoId, requireWatchPage: true)
+        .timeout(const Duration(seconds: 25))
+        .then<List<dynamic>>((manifest) {
+          final candidates = manifest.audioOnly.toList();
+          // A moderate bitrate usually starts faster on mobile data than
+          // always attempting the largest stream first.
+          candidates.sort((a, b) {
+            final aDelta = (a.bitrate.bitsPerSecond - 128000).abs();
+            final bDelta = (b.bitrate.bitsPerSecond - 128000).abs();
+            return aDelta.compareTo(bDelta);
+          });
+          _candidateCache[videoId] = _CandidateCacheEntry(
+            DateTime.now().add(const Duration(minutes: 3)),
+            candidates,
+          );
+          if (_candidateCache.length > 12) {
+            _candidateCache.remove(_candidateCache.keys.first);
+          }
+          return candidates;
+        }).whenComplete(() {
+          _candidateRequests.remove(videoId);
+        });
+    _candidateRequests[videoId] = request;
+    return request;
+  }
+
+  void _prefetchNextManifest() {
+    final items = queue.value;
+    final nextIndex = _queueIndex + 1;
+    if (nextIndex >= items.length) return;
+    final next = items[nextIndex];
+    final nextId = (next.extras?['videoId'] as String?) ?? next.id;
+    if (nextId.isEmpty) return;
+    unawaited(_resolveAudioCandidates(nextId).then<void>((_) {}).catchError((Object _) {}));
+  }
 
   FluxAudioHandler() {
     _player.playbackEventStream.listen(
@@ -169,17 +233,13 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       // URLs from several previously working clients with HTTP 403. The pinned
       // extractor fork adds the visionOS client and selects compatible clients
       // itself. Fetching the watch page is required for that resolution path.
-      final manifest = await _youtube.videos.streams
-          .getManifest(videoId, requireWatchPage: true)
-          .timeout(const Duration(seconds: 25));
-      final candidates = manifest.audioOnly.toList()
-        ..sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+      final candidates = await _resolveAudioCandidates(videoId);
 
       if (candidates.isEmpty) {
         lastError = StateError('YouTube returned no audio-only streams for this track.');
       } else {
         // Try several audio formats/bitrates in case one endpoint is rejected.
-        for (final stream in candidates.take(6)) {
+        for (final stream in candidates.take(4)) {
           if (generation != _loadGeneration) return;
           try {
             await _player.setAudioSource(
@@ -193,6 +253,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
             _publishPlaybackState();
             unawaited(_attachAudioEffects());
             unawaited(_playSafely(generation));
+            _prefetchNextManifest();
             return;
           } catch (error) {
             lastError = error;
@@ -296,6 +357,9 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   @override
   Future<void> stop() async {
     ++_loadGeneration;
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    _sleepTimerEndsAt = null;
     _lastPlaybackError = null;
     await _player.stop();
     mediaItem.add(null);
@@ -304,7 +368,16 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   Future<void> disposePlayer() async {
     ++_loadGeneration;
+    _sleepTimer?.cancel();
     _youtube.close();
     await _player.dispose();
   }
+}
+
+
+class _CandidateCacheEntry {
+  const _CandidateCacheEntry(this.expiresAt, this.candidates);
+
+  final DateTime expiresAt;
+  final List<dynamic> candidates;
 }
