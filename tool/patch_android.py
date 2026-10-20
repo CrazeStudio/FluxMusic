@@ -79,6 +79,80 @@ for main_activity in Path("android/app/src/main").rglob("MainActivity.kt"):
         'import com.ryanheise.audioservice.AudioServiceActivity',
     )
     source = source.replace('MainActivity : FlutterActivity()', 'MainActivity : AudioServiceActivity()')
+    if 'dev.crazestudio.fluxmusic/audio_effects' not in source:
+        source = source.replace(
+            'import com.ryanheise.audioservice.AudioServiceActivity',
+            'import com.ryanheise.audioservice.AudioServiceActivity\nimport android.media.audiofx.DynamicsProcessing\nimport android.media.audiofx.LoudnessEnhancer\nimport io.flutter.embedding.engine.FlutterEngine\nimport io.flutter.plugin.common.MethodChannel',
+        )
+        source = source.replace(
+            'class MainActivity : AudioServiceActivity()',
+            '''class MainActivity : AudioServiceActivity() {
+    private val effectChannel = "dev.crazestudio.fluxmusic/audio_effects"
+    private var effectSessionId = 0
+    private var normalizationEnabled = true
+    private var limiterEnabled = true
+    private var drcEnabled = false
+    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private var dynamicsProcessing: DynamicsProcessing? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, effectChannel).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getSettings" -> result.success(mapOf("normalization" to normalizationEnabled, "limiter" to limiterEnabled, "drc" to drcEnabled))
+                "attachSession" -> {
+                    effectSessionId = call.argument<Int>("sessionId") ?: 0
+                    applyAudioEffects()
+                    result.success(null)
+                }
+                "setSettings" -> {
+                    normalizationEnabled = call.argument<Boolean>("normalization") ?: true
+                    limiterEnabled = call.argument<Boolean>("limiter") ?: true
+                    drcEnabled = call.argument<Boolean>("drc") ?: false
+                    applyAudioEffects()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun applyAudioEffects() {
+        if (effectSessionId <= 0) return
+        try {
+            loudnessEnhancer?.release()
+            loudnessEnhancer = if (normalizationEnabled) LoudnessEnhancer(effectSessionId).apply {
+                setTargetGain(0)
+                enabled = true
+            } else null
+
+            dynamicsProcessing?.release()
+            dynamicsProcessing = null
+            if (limiterEnabled || drcEnabled) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    val config = DynamicsProcessing.Config.Builder(
+                        DynamicsProcessing.VARIANT_FAVOR_FREQUENCY,
+                        2,
+                        false, 0,
+                        drcEnabled, if (drcEnabled) 1 else 0,
+                        false, 0,
+                        limiterEnabled
+                    ).build()
+                    dynamicsProcessing = DynamicsProcessing(0, effectSessionId, config).apply { enabled = true }
+                }
+            }
+        } catch (_: Exception) {
+            // Audio effects are best-effort; playback must continue if a device rejects them.
+        }
+    }
+
+    override fun onDestroy() {
+        loudnessEnhancer?.release()
+        dynamicsProcessing?.release()
+        super.onDestroy()
+    }
+}''',
+        )
     main_activity.write_text(source, encoding="utf-8")
 
 print("Patched Android label/icon, internet access, notification permission, and audio_service media playback.")
