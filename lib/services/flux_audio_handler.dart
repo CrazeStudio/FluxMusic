@@ -90,13 +90,13 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         MediaControl.skipToNext,
         MediaControl.custom(
           name: 'shuffle',
+          label: _shuffleEnabled ? 'Shuffle on' : 'Shuffle off',
           androidIcon: 'drawable/ic_action_shuffle',
-          extras: <String, dynamic>{'label': _shuffleEnabled ? 'Shuffle on' : 'Shuffle off'},
         ),
         MediaControl.custom(
           name: 'repeat',
+          label: _repeatEnabled ? 'Repeat one on' : 'Repeat off',
           androidIcon: 'drawable/ic_action_repeat',
-          extras: <String, dynamic>{'label': _repeatEnabled ? 'Repeat one on' : 'Repeat off'},
         ),
         MediaControl.stop,
       ],
