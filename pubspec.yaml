@@ -15,6 +15,8 @@ dependencies:
   just_audio: ^0.10.6
   youtube_explode_dart: ^3.1.0
   shared_preferences: ^2.5.3
+  # 2.5.0 has a known Android release/R8 JNI regression.
+  shared_preferences_android: 2.4.28
   permission_handler: ^12.0.1
   flutter_svg: ^2.0.17
 
