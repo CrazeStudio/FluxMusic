@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:dart_ytmusic_api/yt_music.dart';
@@ -229,6 +230,7 @@ class _MusicHomeState extends State<MusicHome> {
   bool _randomCatalogue = true;
   bool _languageSelectionError = false;
   final Set<String> _selectedLanguages = <String>{};
+  final List<String> _discoveryMoods = <String>['Indie picks', 'Lo-fi focus', 'Night drive', 'Anime OST'];
   final Map<String, List<Track>> _playlists = <String, List<Track>>{};
   bool _searchPlaylistsMode = false;
   List<_YtMusicPlaylist> _ytPlaylistResults = <_YtMusicPlaylist>[];
@@ -250,6 +252,7 @@ class _MusicHomeState extends State<MusicHome> {
       _recent = recentJson.map(_decodeTrack).whereType<Track>().toList();
       _onboardingComplete = prefs.getBool('fluxmusic.personalization_done.v1') ?? false;
       _randomCatalogue = prefs.getBool('fluxmusic.random_catalogue.v1') ?? true;
+      if (_randomCatalogue) _discoveryMoods.shuffle(Random());
       _selectedLanguages
         ..clear()
         ..addAll(prefs.getStringList('fluxmusic.catalogue_languages.v1') ?? <String>[]);
@@ -334,6 +337,7 @@ class _MusicHomeState extends State<MusicHome> {
       return;
     }
     final chosen = skip ? <String>[] : _selectedLanguages.toList();
+    if (skip) _discoveryMoods.shuffle(Random());
     setState(() {
       _randomCatalogue = skip;
       _onboardingComplete = true;
@@ -1168,13 +1172,10 @@ class _MusicHomeState extends State<MusicHome> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: <Widget>[
-              _moodCard('Indie picks', 0),
-              const SizedBox(width: 12),
-              _moodCard('Lo-fi focus', 1),
-              const SizedBox(width: 12),
-              _moodCard('Night drive', 2),
-              const SizedBox(width: 12),
-              _moodCard('Anime OST', 3),
+              for (var index = 0; index < _discoveryMoods.length; index++) ...<Widget>[
+                _moodCard(_discoveryMoods[index], index),
+                if (index < _discoveryMoods.length - 1) const SizedBox(width: 12),
+              ],
             ],
           ),
         ),
