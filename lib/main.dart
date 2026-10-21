@@ -1086,6 +1086,28 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
+  void _openSettings() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (sheetContext) => AppSettingsSheet(
+        languageSummary: _randomCatalogue
+            ? 'Mixed catalogue'
+            : '${_selectedLanguages.length} languages selected',
+        onOpenAudio: () {
+          Navigator.of(sheetContext).pop();
+          _openAudioEnhancements();
+        },
+        onEditCatalogue: () {
+          Navigator.of(sheetContext).pop();
+          _editPersonalization();
+        },
+      ),
+    );
+  }
+
   Widget _topBar() {
     if (_tab != 0) return const SizedBox.shrink();
     return Padding(
@@ -1130,14 +1152,14 @@ class _MusicHomeState extends State<MusicHome> {
           ),
           const SizedBox(width: 7),
           Tooltip(
-            message: 'Audio settings',
+            message: 'Settings',
             child: InkWell(
               borderRadius: BorderRadius.circular(22),
-              onTap: _openAudioEnhancements,
+              onTap: _openSettings,
               child: Container(
                 width: 36, height: 36, alignment: Alignment.center,
-                decoration: BoxDecoration(color: const Color(0xFF1E1E1E), shape: BoxShape.circle, border: Border.all(color: const Color(0xFF333333))),
-                child: const Icon(Icons.tune_rounded, color: _mint, size: 19),
+                decoration: BoxDecoration(color: const Color(0xFF1E1E1E), shape: BoxShape.circle, border: Border.all(color: const Color(0xFF3A3029))),
+                child: const Icon(Icons.settings_rounded, color: _mint, size: 19),
               ),
             ),
           ),
@@ -1940,6 +1962,183 @@ class _MusicHomeState extends State<MusicHome> {
           ),
         );
       },
+    );
+  }
+}
+
+class AppSettingsSheet extends StatelessWidget {
+  const AppSettingsSheet({
+    super.key,
+    required this.languageSummary,
+    required this.onOpenAudio,
+    required this.onEditCatalogue,
+  });
+
+  final String languageSummary;
+  final VoidCallback onOpenAudio;
+  final VoidCallback onEditCatalogue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      decoration: const BoxDecoration(
+        color: Color(0xFF121212),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .84),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: <Widget>[
+                    const Expanded(
+                      child: Text('Settings', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7)),
+                    ),
+                    IconButton(
+                      tooltip: 'Close settings',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _sectionLabel('PLAYBACK & AUDIO'),
+                const SizedBox(height: 9),
+                _row(
+                  icon: Icons.graphic_eq_rounded,
+                  title: 'Playback & sound',
+                  subtitle: 'Quality, normalization, limiter and bass',
+                  onTap: onOpenAudio,
+                ),
+                const SizedBox(height: 20),
+                _sectionLabel('YOUR MUSIC'),
+                const SizedBox(height: 9),
+                _row(
+                  icon: Icons.language_rounded,
+                  title: 'Catalogue & languages',
+                  subtitle: languageSummary,
+                  onTap: onEditCatalogue,
+                ),
+                const SizedBox(height: 20),
+                _sectionLabel('APPEARANCE'),
+                const SizedBox(height: 9),
+                Container(
+                  padding: const EdgeInsets.all(13),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E1E),
+                    borderRadius: BorderRadius.circular(17),
+                    border: Border.all(color: const Color(0xFF333333)),
+                  ),
+                  child: Row(
+                    children: <Widget>[
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF242424),
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                        child: const Icon(Icons.palette_outlined, color: _mint, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text('Dark charcoal', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                            SizedBox(height: 4),
+                            Text('Orange accent · FluxMusic theme', style: TextStyle(color: _playerMuted, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 23,
+                        height: 23,
+                        decoration: const BoxDecoration(color: _mint, shape: BoxShape.circle),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      SizedBox(width: 22, height: 22, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
+                      const SizedBox(width: 8),
+                      const Text('CrazeStudio', style: TextStyle(color: _playerMuted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionLabel(String value) => Text(
+        value,
+        style: const TextStyle(color: _mint, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+      );
+
+  Widget _row({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: const Color(0xFF1E1E1E),
+      borderRadius: BorderRadius.circular(17),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(17),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF35251C),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: _mint, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _playerMuted, fontSize: 11, height: 1.3)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: _playerMuted, size: 22),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
