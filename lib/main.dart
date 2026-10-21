@@ -1206,7 +1206,7 @@ class _MusicHomeState extends State<MusicHome> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              SizedBox(width: 22, height: 22, child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain)),
+              SizedBox(width: 24, height: 24, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
               const SizedBox(width: 8),
               const Text('CrazeStudio', style: TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
             ],
