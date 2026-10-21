@@ -708,6 +708,17 @@ class _MusicHomeState extends State<MusicHome> {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       children: <Widget>[
         Row(children: <Widget>[
+          IconButton(
+            tooltip: 'Back to Home',
+            onPressed: () => setState(() => _tab = 0),
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFF1E1E1E),
+              foregroundColor: _ink,
+              side: const BorderSide(color: Color(0xFF333333)),
+            ),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+          const SizedBox(width: 10),
           const Expanded(child: Text('Your playlists', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink))),
           IconButton.filledTonal(
             tooltip: 'Create playlist',
