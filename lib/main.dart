@@ -1142,7 +1142,7 @@ class _MusicHomeState extends State<MusicHome> {
             ),
           ),
           const SizedBox(width: 11),
-          const Expanded(child: Text('FluxMusic', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.8, color: _ink))),
+          const Spacer(),
           Tooltip(
             message: 'Personalize catalogue',
             child: InkWell(
