@@ -212,6 +212,7 @@ class _MusicHomeState extends State<MusicHome> {
   final List<String> _discoveryMoods = <String>['Indie picks', 'Lo-fi focus', 'Night drive', 'Anime OST'];
   final Map<String, List<Track>> _playlists = <String, List<Track>>{};
   bool _searchPlaylistsMode = false;
+  String? _loadedOnlinePlaylistTitle;
   List<_YtMusicPlaylist> _ytPlaylistResults = <_YtMusicPlaylist>[];
   final Map<String, List<_YtMusicPlaylist>> _playlistSearchCache = <String, List<_YtMusicPlaylist>>{};
 
@@ -432,8 +433,8 @@ class _MusicHomeState extends State<MusicHome> {
     }
   }
 
-  Future<void> _createPlaylist() async {
-    final controller = TextEditingController();
+  Future<void> _createPlaylist({String? initialName, List<Track>? seedTracks}) async {
+    final controller = TextEditingController(text: initialName ?? '');
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -461,7 +462,7 @@ class _MusicHomeState extends State<MusicHome> {
       return;
     }
     setState(() {
-      _playlists[cleanName] = <Track>[];
+      _playlists[cleanName] = List<Track>.of(seedTracks ?? <Track>[]);
       _libraryFilter = 2;
       _tab = 2;
     });
@@ -532,6 +533,7 @@ class _MusicHomeState extends State<MusicHome> {
     setState(() {
       _tab = 1;
       _searchPlaylistsMode = true;
+      _loadedOnlinePlaylistTitle = null;
       _searching = true;
       _lastQuery = clean;
       _error = null;
@@ -593,6 +595,7 @@ class _MusicHomeState extends State<MusicHome> {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _searchPlaylistsMode = false;
+        _loadedOnlinePlaylistTitle = playlist.name;
         _searching = false;
         _lastQuery = playlist.name;
         _results = tracks;
@@ -743,6 +746,7 @@ class _MusicHomeState extends State<MusicHome> {
     setState(() {
       _tab = 1;
       _searchPlaylistsMode = false;
+      _loadedOnlinePlaylistTitle = null;
       _searching = true;
       _lastQuery = clean;
       _error = null;
@@ -1459,8 +1463,37 @@ class _MusicHomeState extends State<MusicHome> {
                             ? const _EmptyState(icon: Icons.search_rounded, title: 'No songs found', subtitle: 'Try another song, artist, or search term.')
                             : ListView.builder(
                                 padding: const EdgeInsets.only(bottom: 14),
-                                itemCount: _results.length,
-                                itemBuilder: (_, index) => _trackTile(_results[index], index, _results),
+                                itemCount: _results.length + (_loadedOnlinePlaylistTitle == null ? 0 : 1),
+                                itemBuilder: (_, index) {
+                                  if (_loadedOnlinePlaylistTitle != null && index == 0) {
+                                    return Card(
+                                      color: const Color(0xFF1E1E1E),
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(13),
+                                        child: Row(children: <Widget>[
+                                          const Icon(Icons.cloud_done_rounded, color: _mint, size: 25),
+                                          const SizedBox(width: 10),
+                                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+                                            const Text('YouTube Music playlist loaded', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                            Text(_loadedOnlinePlaylistTitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10)),
+                                          ])),
+                                          const SizedBox(width: 5),
+                                          IconButton(
+                                            tooltip: 'Save tracklist as a local playlist',
+                                            onPressed: () => _createPlaylist(
+                                              initialName: _loadedOnlinePlaylistTitle,
+                                              seedTracks: _results,
+                                            ),
+                                            icon: const Icon(Icons.playlist_add_rounded, color: _mint),
+                                          ),
+                                        ]),
+                                      ),
+                                    );
+                                  }
+                                  final trackIndex = index - (_loadedOnlinePlaylistTitle == null ? 0 : 1);
+                                  return _trackTile(_results[trackIndex], trackIndex, _results);
+                                },
                               ),
           ),
       ]),
