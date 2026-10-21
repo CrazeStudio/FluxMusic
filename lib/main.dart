@@ -11,6 +11,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'models/catalogue_preferences.dart';
 import 'models/track.dart';
 import 'services/flux_audio_handler.dart';
 
@@ -22,28 +23,6 @@ const _mint = Color(0xFF777B43);
 const _violet = Color(0xFFB9796A);
 const _muted = Color(0xFFB0B0B0);
 const _playerMuted = Color(0xFF9E9E9E);
-
-const Map<String, String> _catalogueLanguageTerms = <String, String>{
-  'Hindi': 'Hindi new songs hits',
-  'Bengali': 'Bengali Bangla songs',
-  'English': 'English pop hits',
-  'Tamil': 'Tamil hit songs',
-  'Telugu': 'Telugu hit songs',
-  'Punjabi': 'Punjabi hit songs',
-  'Marathi': 'Marathi songs hits',
-  'Malayalam': 'Malayalam hit songs',
-  'Kannada': 'Kannada hit songs',
-  'Urdu': 'Urdu songs',
-  'Japanese': 'J-pop Japanese songs',
-  'Korean': 'K-pop Korean songs',
-  'Spanish': 'Spanish pop songs',
-  'Instrumental': 'instrumental music',
-};
-
-const List<String> _catalogueLanguages = <String>[
-  'Hindi', 'Bengali', 'English', 'Tamil', 'Telugu', 'Punjabi', 'Marathi',
-  'Malayalam', 'Kannada', 'Urdu', 'Japanese', 'Korean', 'Spanish', 'Instrumental',
-];
 
 class _YtMusicPlaylist {
   const _YtMusicPlaylist({
@@ -389,7 +368,7 @@ class _MusicHomeState extends State<MusicHome> {
                   child: Wrap(
                     spacing: 9,
                     runSpacing: 9,
-                    children: _catalogueLanguages.map((language) => FilterChip(
+                    children: CataloguePreferences.languages.map((language) => FilterChip(
                       label: Text(language),
                       selected: _selectedLanguages.contains(language),
                       showCheckmark: true,
@@ -1090,18 +1069,22 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _discover() {
     final recent = _recent.take(10).toList();
+    final personalized = CataloguePreferences.isPersonalized(
+      randomized: _randomCatalogue,
+      languages: _selectedLanguages,
+    );
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
       children: <Widget>[
         Text(
-          _randomCatalogue ? 'Discover your next favourite' : 'Picked for your languages',
+          personalized ? 'Picked for your languages' : 'Discover your next favourite',
           style: const TextStyle(fontSize: 27, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.0),
         ),
         const SizedBox(height: 6),
         Text(
-          _randomCatalogue
-              ? 'A randomized mix of music from everywhere.'
-              : 'Your catalogue starts with ${_selectedLanguages.take(3).join(' · ')}.',
+          personalized
+              ? 'Your catalogue starts with ${_selectedLanguages.take(3).join(' · ')}.'
+              : 'A randomized mix of music from everywhere.',
           style: const TextStyle(color: _muted, fontSize: 13),
         ),
         const SizedBox(height: 23),
@@ -1131,7 +1114,7 @@ class _MusicHomeState extends State<MusicHome> {
                   ],
                 ),
         ),
-        if (!_randomCatalogue && _selectedLanguages.isNotEmpty) ...<Widget>[
+        if (personalized) ...<Widget>[
           const Text('Your languages', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
           const SizedBox(height: 10),
           SizedBox(
@@ -1149,7 +1132,7 @@ class _MusicHomeState extends State<MusicHome> {
                     'Personalized picks',
                     const Color(0xFF252525),
                     Icons.language_rounded,
-                    _catalogueLanguageTerms[language] ?? '$language music',
+                    CataloguePreferences.queryFor(language),
                   ),
                 );
               },
