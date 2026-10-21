@@ -19,10 +19,10 @@ late final FluxAudioHandler fluxAudio;
 
 const _ink = Color(0xFFF5F5F5);
 const _cardInk = Color(0xFF29261F);
-const _mint = Color(0xFF777B43);
-const _violet = Color(0xFFB9796A);
-const _muted = Color(0xFFB0B0B0);
-const _playerMuted = Color(0xFF9E9E9E);
+const _mint = Color(0xFFFF8A35);
+const _violet = Color(0xFFFFB16D);
+const _muted = Color(0xFFB8B8B8);
+const _playerMuted = Color(0xFFA3A3A3);
 
 class _YtMusicPlaylist {
   const _YtMusicPlaylist({
@@ -723,14 +723,21 @@ class _MusicHomeState extends State<MusicHome> {
             ),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              leading: Container(
-                width: 54, height: 54,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[Color(0xFF777B43), Color(0xFF34351F)]),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.queue_music_rounded, color: Colors.white, size: 27),
-              ),
+              leading: entry.value.isNotEmpty
+                  ? _CoverArt(url: entry.value.first.thumbnailUrl, size: 56, radius: 14)
+                  : Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: <Color>[Color(0xFFFF8A35), Color(0xFF3A2518)],
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(Icons.queue_music_rounded, color: Colors.white, size: 27),
+                    ),
               title: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
               subtitle: Padding(
                 padding: const EdgeInsets.only(top: 5),
@@ -1040,19 +1047,26 @@ class _MusicHomeState extends State<MusicHome> {
                   ),
                 ),
                 _miniPlayer(),
-                NavigationBar(
-                  height: 62,
-                  elevation: 0,
-                  backgroundColor: const Color(0xFF121212),
-                  surfaceTintColor: Colors.transparent,
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-                  selectedIndex: _tab,
-                  onDestinationSelected: (index) => setState(() => _tab = index),
-                  destinations: const <NavigationDestination>[
-                    NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
-                    NavigationDestination(icon: Icon(Icons.search_rounded), label: 'Search'),
-                    NavigationDestination(icon: Icon(Icons.library_music_outlined), selectedIcon: Icon(Icons.library_music_rounded), label: 'Library'),
-                  ],
+                Container(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF121212),
+                    border: Border(top: BorderSide(color: Color(0xFF292929))),
+                  ),
+                  child: NavigationBar(
+                    height: 66,
+                    elevation: 0,
+                    backgroundColor: const Color(0xFF121212),
+                    surfaceTintColor: Colors.transparent,
+                    indicatorColor: _mint.withValues(alpha: .16),
+                    labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                    selectedIndex: _tab,
+                    onDestinationSelected: (index) => setState(() => _tab = index),
+                    destinations: const <NavigationDestination>[
+                      NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
+                      NavigationDestination(icon: Icon(Icons.search_rounded), selectedIcon: Icon(Icons.search_rounded), label: 'Search'),
+                      NavigationDestination(icon: Icon(Icons.library_music_outlined), selectedIcon: Icon(Icons.library_music_rounded), label: 'Library'),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1080,16 +1094,23 @@ class _MusicHomeState extends State<MusicHome> {
         height: 42,
         child: Row(children: <Widget>[
           Container(
-            width: 42,
-            height: 42,
+            width: 46,
+            height: 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: const Color(0xFF24251D),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF3A3B2A)),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: <Color>[Color(0xFF38251A), Color(0xFF1E1E1E)],
+              ),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: const Color(0xFF5A3825)),
+              boxShadow: const <BoxShadow>[
+                BoxShadow(color: Color(0x263F210F), blurRadius: 14, offset: Offset(0, 4)),
+              ],
             ),
             child: Padding(
-              padding: const EdgeInsets.all(5),
+              padding: const EdgeInsets.all(6),
               child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain),
             ),
           ),
@@ -1324,12 +1345,12 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _moodCard(String mood, int index) {
     const palettes = <List<Color>>[
-      <Color>[Color(0xFF252525), Color(0xFF1B1B1B)],
-      <Color>[Color(0xFF242821), Color(0xFF191D18)],
-      <Color>[Color(0xFF2B211F), Color(0xFF1E1817)],
-      <Color>[Color(0xFF20252B), Color(0xFF171B20)],
-      <Color>[Color(0xFF292127), Color(0xFF1D181D)],
-      <Color>[Color(0xFF28281F), Color(0xFF1B1B16)],
+      <Color>[Color(0xFF3A281D), Color(0xFF211915)],
+      <Color>[Color(0xFF30271F), Color(0xFF1C1916)],
+      <Color>[Color(0xFF3A2420), Color(0xFF211716)],
+      <Color>[Color(0xFF28242A), Color(0xFF18171B)],
+      <Color>[Color(0xFF34231E), Color(0xFF1D1715)],
+      <Color>[Color(0xFF30291F), Color(0xFF1B1915)],
     ];
     const icons = <IconData>[
       Icons.local_fire_department_rounded,
@@ -1362,16 +1383,16 @@ class _MusicHomeState extends State<MusicHome> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                   Container(
                     width: 34, height: 34,
-                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: .6), borderRadius: BorderRadius.circular(12)),
-                    child: Icon(icon, color: _cardInk.withValues(alpha: .75), size: 19),
+                    decoration: BoxDecoration(color: _mint, borderRadius: BorderRadius.circular(12)),
+                    child: Icon(icon, color: const Color(0xFF21160F), size: 19),
                   ),
                   const Spacer(),
-                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _cardInk, fontSize: 12, fontWeight: FontWeight.w800)),
+                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Row(children: <Widget>[
                     const Text('PLAY MIX', style: TextStyle(fontSize: 8, color: _muted, fontWeight: FontWeight.w800, letterSpacing: 1.05)),
                     const Spacer(),
-                    Icon(Icons.arrow_outward_rounded, color: _cardInk.withValues(alpha: .7), size: 13),
+                    Icon(Icons.arrow_outward_rounded, color: _ink.withValues(alpha: .72), size: 13),
                   ]),
                 ]),
               ),
@@ -1620,7 +1641,17 @@ class _MusicHomeState extends State<MusicHome> {
         const SizedBox(height: 17),
         Container(
           height: 130, clipBehavior: Clip.antiAlias, padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF333333))),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: showingRecent
+                  ? const <Color>[Color(0xFF2B211B), Color(0xFF1B1B1B)]
+                  : const <Color>[Color(0xFF332018), Color(0xFF1B1B1B)],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF4A3325)),
+          ),
           child: Stack(children: <Widget>[
             Positioned(right: -5, top: -15, child: Icon(Icons.favorite_rounded, size: 115, color: Colors.white.withValues(alpha: .13))),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
@@ -1659,14 +1690,30 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _libraryChip(String label, int index) {
     final selected = _libraryFilter == index;
-    return Material(
-      color: selected ? const Color(0xFF2A2A2A) : const Color(0xFF1E1E1E),
-      borderRadius: BorderRadius.circular(18),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      decoration: BoxDecoration(
+        color: selected ? _mint : const Color(0xFF1D1D1D),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: selected ? _mint : const Color(0xFF343434)),
+        boxShadow: selected
+            ? const <BoxShadow>[BoxShadow(color: Color(0x1AFF8A35), blurRadius: 10, offset: Offset(0, 3))]
+            : const <BoxShadow>[],
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18), onTap: () => setState(() => _libraryFilter = index),
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => setState(() => _libraryFilter = index),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Text(label, style: TextStyle(color: selected ? _ink : _muted, fontSize: 11, fontWeight: FontWeight.w800)),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? const Color(0xFF17110D) : _muted,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ),
       ),
     );
@@ -1802,45 +1849,92 @@ class _MusicHomeState extends State<MusicHome> {
         final item = snapshot.data;
         if (item == null) return const SizedBox.shrink();
         return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 7),
+          padding: const EdgeInsets.fromLTRB(12, 5, 12, 8),
           child: Material(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(15),
+            color: const Color(0xFF1C1C1C),
+            borderRadius: BorderRadius.circular(17),
+            clipBehavior: Clip.antiAlias,
             child: InkWell(
-              borderRadius: BorderRadius.circular(15), onTap: _openPlayer,
+              borderRadius: BorderRadius.circular(17),
+              onTap: _openPlayer,
               child: Container(
-                height: 55,
-                padding: const EdgeInsets.symmetric(horizontal: 9),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), border: Border.all(color: const Color(0xFF333333))),
-                child: Row(children: <Widget>[
-                  _CoverArt(url: item.extras?['thumbnailUrl'] as String? ?? '', size: 39, radius: 9),
-                  const SizedBox(width: 10),
-                  Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                    Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 2),
-                    Text(item.artist ?? 'Unknown artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10)),
-                  ])),
-                  StreamBuilder<PlaybackState>(
-                    stream: fluxAudio.playbackState,
-                    builder: (context, stateSnapshot) {
-                      final playing = stateSnapshot.data?.playing ?? false;
-                      return IconButton(
-                        tooltip: playing ? 'Pause' : 'Play',
-                        visualDensity: VisualDensity.compact,
-                        constraints: const BoxConstraints.tightFor(width: 39, height: 42),
-                        onPressed: () => playing ? fluxAudio.pause() : fluxAudio.play(),
-                        icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: _mint, size: 26),
-                      );
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Next track',
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints.tightFor(width: 35, height: 42),
-                    onPressed: () => fluxAudio.skipToNext(),
-                    icon: const Icon(Icons.skip_next_rounded, color: _ink, size: 23),
-                  ),
-                ]),
+                height: 64,
+                padding: const EdgeInsets.fromLTRB(9, 7, 6, 7),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(17),
+                  border: Border.all(color: const Color(0xFF3A3029)),
+                ),
+                child: Stack(
+                  children: <Widget>[
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: StreamBuilder<Duration>(
+                        stream: fluxAudio.positionStream,
+                        initialData: Duration.zero,
+                        builder: (context, positionSnapshot) {
+                          return StreamBuilder<Duration?>(
+                            stream: fluxAudio.durationStream,
+                            builder: (context, durationSnapshot) {
+                              final duration = durationSnapshot.data ?? Duration.zero;
+                              final position = positionSnapshot.data ?? Duration.zero;
+                              final progress = duration.inMilliseconds <= 0
+                                  ? 0.0
+                                  : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+                              return ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: progress,
+                                  minHeight: 2,
+                                  backgroundColor: Colors.white.withValues(alpha: .06),
+                                  valueColor: const AlwaysStoppedAnimation<Color>(_mint),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    Row(
+                      children: <Widget>[
+                        _CoverArt(url: item.extras?['thumbnailUrl'] as String? ?? '', size: 46, radius: 11),
+                        const SizedBox(width: 11),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 12.5, fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 3),
+                              Text(item.artist ?? 'Unknown artist', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10.5)),
+                            ],
+                          ),
+                        ),
+                        StreamBuilder<PlaybackState>(
+                          stream: fluxAudio.playbackState,
+                          builder: (context, stateSnapshot) {
+                            final playing = stateSnapshot.data?.playing ?? false;
+                            return IconButton(
+                              tooltip: playing ? 'Pause' : 'Play',
+                              visualDensity: VisualDensity.compact,
+                              constraints: const BoxConstraints.tightFor(width: 42, height: 44),
+                              onPressed: () => playing ? fluxAudio.pause() : fluxAudio.play(),
+                              icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: _mint, size: 27),
+                            );
+                          },
+                        ),
+                        IconButton(
+                          tooltip: 'Next track',
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.tightFor(width: 36, height: 44),
+                          onPressed: () => fluxAudio.skipToNext(),
+                          icon: const Icon(Icons.skip_next_rounded, color: _ink, size: 24),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -2002,7 +2096,11 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
 
   Widget _tile(IconData icon, String title, String subtitle, bool value, ValueChanged<bool> onChanged) => Container(
     padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-    decoration: BoxDecoration(color: const Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(17), border: Border.all(color: Colors.white.withValues(alpha: .055))),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1E1E1E),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(color: Colors.white.withValues(alpha: .075)),
+    )
     child: Row(children: <Widget>[
       Icon(icon, color: _mint, size: 24),
       const SizedBox(width: 12),
@@ -2108,13 +2206,13 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                     ],
                   ),
                 ]),
-                const SizedBox(height: 10),
+                const SizedBox(height: 4),
                 SizedBox(
-                  height: (MediaQuery.sizeOf(context).height * .28).clamp(96.0, 240.0).toDouble(),
+                  height: (MediaQuery.sizeOf(context).height * .34).clamp(156.0, 292.0).toDouble(),
                   child: Center(
                     child: _CoverArt(
                       url: item.extras?['thumbnailUrl'] as String? ?? '',
-                      size: (MediaQuery.sizeOf(context).height * .28).clamp(96.0, 240.0).toDouble(),
+                      size: (MediaQuery.sizeOf(context).height * .34).clamp(156.0, 292.0).toDouble(),
                       radius: 16,
                     ),
                   ),
@@ -2740,7 +2838,7 @@ class _DecorativeArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bases = <Color>[const Color(0xFF242126), const Color(0xFF29211F), const Color(0xFF222820), const Color(0xFF20252B)];
-    final accents = <Color>[const Color(0xFFB9796A), const Color(0xFF777B43), const Color(0xFF6C927E), const Color(0xFF6C83A1)];
+    final accents = <Color>[const Color(0xFFB9796A), const Color(0xFFFF8A35), const Color(0xFF6C927E), const Color(0xFF6C83A1)];
     final base = bases[variant % bases.length];
     final accent = accents[variant % accents.length];
     return Container(
@@ -2748,7 +2846,7 @@ class _DecorativeArt extends StatelessWidget {
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[base, Color.lerp(base, Colors.white, .08)!])),
       child: Stack(children: <Widget>[
         Positioned(right: -size * .04, top: size * .08, child: Container(width: size * .68, height: size * .68, decoration: BoxDecoration(shape: BoxShape.circle, color: accent.withValues(alpha: .88)))),
-        Positioned(left: size * .10, bottom: size * .17, child: Container(width: size * .80, height: size * .14, decoration: BoxDecoration(color: const Color(0xFF777B43), borderRadius: BorderRadius.circular(size * .08)))),
+        Positioned(left: size * .10, bottom: size * .17, child: Container(width: size * .80, height: size * .14, decoration: BoxDecoration(color: const Color(0xFFFF8A35), borderRadius: BorderRadius.circular(size * .08)))),
         Positioned(left: size * .18, top: size * .13, child: Container(width: size * .18, height: size * .18, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF121212)))),
         Positioned(right: size * .17, bottom: size * .12, child: Container(width: size * .13, height: size * .13, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: .72)))),
       ]),
@@ -2771,7 +2869,14 @@ class _CoverArt extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        gradient: const LinearGradient(colors: <Color>[Color(0xFF333D60), Color(0xFF24203E)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: const LinearGradient(
+          colors: <Color>[Color(0xFF3A2A22), Color(0xFF24203E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(color: Color(0x28000000), blurRadius: 12, offset: Offset(0, 5)),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
