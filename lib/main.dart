@@ -709,8 +709,8 @@ class _MusicHomeState extends State<MusicHome> {
       children: <Widget>[
         Row(children: <Widget>[
           IconButton(
-            tooltip: 'Back to Home',
-            onPressed: () => setState(() => _tab = 0),
+            tooltip: 'Back to Library',
+            onPressed: () => setState(() => _libraryFilter = 0),
             style: IconButton.styleFrom(
               backgroundColor: const Color(0xFF1E1E1E),
               foregroundColor: _ink,
