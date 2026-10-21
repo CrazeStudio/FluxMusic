@@ -480,7 +480,7 @@ class _MusicHomeState extends State<MusicHome> {
   Future<void> _addTrackToPlaylist(Track track) async {
     if (_playlists.isEmpty) {
       await _createPlaylist();
-      if (_playlists.isEmpty) return;
+      if (!mounted || _playlists.isEmpty) return;
     }
     final selectedName = await showModalBottomSheet<String>(
       context: context,
