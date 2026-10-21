@@ -40,6 +40,10 @@ jobs:
         continue-on-error: true
 
       - name: Build Windows release
+        env:
+          # Work around MSVC's STL1011 error in permission_handler_windows
+          # on current Visual Studio runners.
+          CXXFLAGS: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release
 
       - name: Package Windows app
