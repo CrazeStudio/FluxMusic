@@ -2299,7 +2299,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       color: const Color(0xFF1E1E1E),
       borderRadius: BorderRadius.circular(18),
       border: Border.all(color: Colors.white.withValues(alpha: .075)),
-    )
+    ),
     child: Row(children: <Widget>[
       Icon(icon, color: _mint, size: 24),
       const SizedBox(width: 12),
