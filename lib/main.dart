@@ -1113,7 +1113,7 @@ class _MusicHomeState extends State<MusicHome> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 7, 20, 4),
       child: SizedBox(
-        height: 42,
+        height: 46,
         child: Row(children: <Widget>[
           Container(
             width: 46,
