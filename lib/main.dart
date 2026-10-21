@@ -22,6 +22,112 @@ const _violet = Color(0xFFB9796A);
 const _muted = Color(0xFFB0B0B0);
 const _playerMuted = Color(0xFF9E9E9E);
 
+const Map<String, String> _catalogueLanguageTerms = <String, String>{
+  'Hindi': 'Hindi new songs hits',
+  'Bengali': 'Bengali Bangla songs',
+  'English': 'English pop hits',
+  'Tamil': 'Tamil hit songs',
+  'Telugu': 'Telugu hit songs',
+  'Punjabi': 'Punjabi hit songs',
+  'Marathi': 'Marathi songs hits',
+  'Malayalam': 'Malayalam hit songs',
+  'Kannada': 'Kannada hit songs',
+  'Urdu': 'Urdu songs',
+  'Japanese': 'J-pop Japanese songs',
+  'Korean': 'K-pop Korean songs',
+  'Spanish': 'Spanish pop songs',
+  'Instrumental': 'instrumental music',
+};
+
+const List<String> _catalogueLanguages = <String>[
+  'Hindi', 'Bengali', 'English', 'Tamil', 'Telugu', 'Punjabi', 'Marathi',
+  'Malayalam', 'Kannada', 'Urdu', 'Japanese', 'Korean', 'Spanish', 'Instrumental',
+];
+
+class _YtMusicPlaylist {
+  const _YtMusicPlaylist({
+    required this.id,
+    required this.name,
+    this.artist = '',
+    this.thumbnailUrl = '',
+    this.trackCount = '',
+  });
+
+  final String id;
+  final String name;
+  final String artist;
+  final String thumbnailUrl;
+  final String trackCount;
+
+  factory _YtMusicPlaylist.fromSource(dynamic source) {
+    dynamic read(String field) {
+      if (source is Map) return source[field];
+      try {
+        switch (field) {
+          case 'playlistId': return source.playlistId;
+          case 'name': return source.name;
+          case 'title': return source.title;
+          case 'artist': return source.artist;
+          case 'author': return source.author;
+          case 'thumbnail': return source.thumbnail;
+          case 'thumbnailUrl': return source.thumbnailUrl;
+          case 'thumbnails': return source.thumbnails;
+          case 'videoCount': return source.videoCount;
+          case 'trackCount': return source.trackCount;
+          case 'count': return source.count;
+        }
+      } catch (_) {
+        return null;
+      }
+      return null;
+    }
+
+    String string(dynamic value) => value == null ? '' : value.toString().trim();
+    final rawId = string(read('playlistId'));
+    final name = string(read('name')).isNotEmpty
+        ? string(read('name'))
+        : string(read('title'));
+    final artist = string(read('artist')).isNotEmpty
+        ? string(read('artist'))
+        : string(read('author'));
+    var thumbnail = string(read('thumbnailUrl'));
+    final directThumbnail = read('thumbnail');
+    if (thumbnail.isEmpty && directThumbnail != null) {
+      try {
+        thumbnail = string(directThumbnail.url);
+      } catch (_) {
+        thumbnail = string(directThumbnail);
+      }
+    }
+    if (thumbnail.isEmpty) {
+      final thumbnails = read('thumbnails');
+      if (thumbnails is Iterable) {
+        for (final item in thumbnails.toList().reversed) {
+          try {
+            final url = string(item.url);
+            if (url.startsWith('http')) {
+              thumbnail = url;
+              break;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+    final count = string(read('trackCount')).isNotEmpty
+        ? string(read('trackCount'))
+        : string(read('videoCount')).isNotEmpty
+            ? string(read('videoCount'))
+            : string(read('count'));
+    return _YtMusicPlaylist(
+      id: rawId,
+      name: name.isEmpty ? 'YouTube Music playlist' : name,
+      artist: artist,
+      thumbnailUrl: thumbnail.startsWith('http') ? thumbnail : '',
+      trackCount: count,
+    );
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
@@ -118,6 +224,15 @@ class _MusicHomeState extends State<MusicHome> {
   List<Track> _favorites = <Track>[];
   List<Track> _recent = <Track>[];
   List<String> _searchHistory = <String>[];
+  bool _preferencesLoaded = false;
+  bool _onboardingComplete = false;
+  bool _randomCatalogue = true;
+  bool _languageSelectionError = false;
+  final Set<String> _selectedLanguages = <String>{};
+  final Map<String, List<Track>> _playlists = <String, List<Track>>{};
+  bool _searchPlaylistsMode = false;
+  List<_YtMusicPlaylist> _ytPlaylistResults = <_YtMusicPlaylist>[];
+  final Map<String, List<_YtMusicPlaylist>> _playlistSearchCache = <String, List<_YtMusicPlaylist>>{};
 
   @override
   void initState() {
@@ -127,15 +242,30 @@ class _MusicHomeState extends State<MusicHome> {
 
   Future<void> _initialize() async {
     try {
-      await _ytMusic.initialize();
       final prefs = await SharedPreferences.getInstance();
       final favJson = prefs.getStringList('fluxmusic.favorites.v1') ?? <String>[];
       final recentJson = prefs.getStringList('fluxmusic.recent.v1') ?? <String>[];
       _searchHistory = prefs.getStringList('fluxmusic.search_history.v1') ?? <String>[];
       _favorites = favJson.map(_decodeTrack).whereType<Track>().toList();
       _recent = recentJson.map(_decodeTrack).whereType<Track>().toList();
-      if (mounted) setState(() {});
-    } catch (e) {
+      _onboardingComplete = prefs.getBool('fluxmusic.personalization_done.v1') ?? false;
+      _randomCatalogue = prefs.getBool('fluxmusic.random_catalogue.v1') ?? true;
+      _selectedLanguages
+        ..clear()
+        ..addAll(prefs.getStringList('fluxmusic.catalogue_languages.v1') ?? <String>[]);
+      for (final raw in prefs.getStringList('fluxmusic.playlists.v1') ?? <String>[]) {
+        final entry = _decodePlaylist(raw);
+        if (entry != null) _playlists[entry.key] = entry.value;
+      }
+    } catch (_) {
+      // The app still opens when local storage is unavailable.
+    } finally {
+      if (mounted) setState(() => _preferencesLoaded = true);
+    }
+
+    try {
+      await _ytMusic.initialize();
+    } catch (_) {
       if (mounted) {
         setState(() {
           _error = 'Music catalogue could not connect. Check your internet and try again.';
@@ -169,6 +299,125 @@ class _MusicHomeState extends State<MusicHome> {
     }
   }
 
+  MapEntry<String, List<Track>>? _decodePlaylist(String raw) {
+    try {
+      final value = jsonDecode(raw) as Map<String, dynamic>;
+      final name = (value['name'] as String? ?? '').trim();
+      final encodedTracks = value['tracks'];
+      if (name.isEmpty || encodedTracks is! List) return null;
+      final tracks = encodedTracks
+          .whereType<String>()
+          .map(_decodeTrack)
+          .whereType<Track>()
+          .toList();
+      return MapEntry<String, List<Track>>(name, tracks);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _finishPersonalization({required bool skip}) async {
+    if (!skip && _selectedLanguages.isEmpty) {
+      setState(() => _languageSelectionError = true);
+      return;
+    }
+    final chosen = skip ? <String>[] : _selectedLanguages.toList();
+    setState(() {
+      _randomCatalogue = skip;
+      _onboardingComplete = true;
+      _languageSelectionError = false;
+      if (skip) _selectedLanguages.clear();
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('fluxmusic.personalization_done.v1', true);
+      await prefs.setBool('fluxmusic.random_catalogue.v1', skip);
+      await prefs.setStringList('fluxmusic.catalogue_languages.v1', chosen);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your catalogue preference could not be saved on this device.')),
+      );
+    }
+  }
+
+  Widget _languageOnboarding() {
+    return Scaffold(
+      backgroundColor: const Color(0xFF121212),
+      body: Stack(children: <Widget>[
+        const _Atmosphere(),
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+              Row(children: <Widget>[
+                SizedBox(width: 44, height: 44, child: SvgPicture.asset('assets/brand/fluxmusic.svg')),
+                const SizedBox(width: 12),
+                const Text('FluxMusic', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8)),
+              ]),
+              const SizedBox(height: 30),
+              const Text('Make your catalogue yours', style: TextStyle(fontSize: 29, height: 1.12, fontWeight: FontWeight.w800, letterSpacing: -.9)),
+              const SizedBox(height: 9),
+              const Text(
+                'Choose every language you enjoy. We’ll put those music searches first. You can skip and get a mixed, randomized catalogue instead.',
+                style: TextStyle(color: _muted, fontSize: 13, height: 1.5),
+              ),
+              const SizedBox(height: 20),
+              Row(children: <Widget>[
+                const Expanded(child: Text('Your languages', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                Text('${_selectedLanguages.length} selected', style: const TextStyle(color: _muted, fontSize: 11)),
+              ]),
+              const SizedBox(height: 12),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Wrap(
+                    spacing: 9,
+                    runSpacing: 9,
+                    children: _catalogueLanguages.map((language) => FilterChip(
+                      label: Text(language),
+                      selected: _selectedLanguages.contains(language),
+                      showCheckmark: true,
+                      onSelected: (selected) => setState(() {
+                        if (selected) {
+                          _selectedLanguages.add(language);
+                        } else {
+                          _selectedLanguages.remove(language);
+                        }
+                        _languageSelectionError = false;
+                      }),
+                    )).toList(),
+                  ),
+                ),
+              ),
+              if (_languageSelectionError)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text('Pick at least one language, or skip for the randomized catalogue.', style: TextStyle(color: Color(0xFFFFB4AB), fontSize: 11)),
+                ),
+              const SizedBox(height: 14),
+              Row(children: <Widget>[
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => _finishPersonalization(skip: true),
+                    child: const Text('Skip · random catalogue', textAlign: TextAlign.center),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: _selectedLanguages.isEmpty ? null : () => _finishPersonalization(skip: false),
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Personalize'),
+                  ),
+                ),
+              ]),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
   Future<void> _search(String query) async {
     final clean = query.trim();
     if (clean.isEmpty) return;
@@ -183,6 +432,7 @@ class _MusicHomeState extends State<MusicHome> {
     FocusScope.of(context).unfocus();
     setState(() {
       _tab = 1;
+      _searchPlaylistsMode = false;
       _searching = true;
       _lastQuery = clean;
       _error = null;
@@ -404,6 +654,13 @@ class _MusicHomeState extends State<MusicHome> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_preferencesLoaded) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF121212),
+        body: Center(child: CircularProgressIndicator(color: _mint)),
+      );
+    }
+    if (!_onboardingComplete) return _languageOnboarding();
     return Scaffold(
       body: Stack(
         children: <Widget>[
@@ -461,11 +718,7 @@ class _MusicHomeState extends State<MusicHome> {
       child: SizedBox(
         height: 42,
         child: Row(children: <Widget>[
-          Container(
-            width: 31, height: 31,
-            decoration: BoxDecoration(color: const Color(0xFF2A2A2A), borderRadius: BorderRadius.circular(11)),
-            child: const Icon(Icons.music_note_rounded, color: _mint, size: 20),
-          ),
+          SizedBox(width: 31, height: 31, child: SvgPicture.asset('assets/brand/fluxmusic.svg')),
           const SizedBox(width: 9),
           const Expanded(child: Text('FluxMusic', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.8, color: _ink))),
           Tooltip(
@@ -490,9 +743,17 @@ class _MusicHomeState extends State<MusicHome> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
       children: <Widget>[
-        const Text('Good music, good mood.', style: TextStyle(fontSize: 27, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.0)),
+        Text(
+          _randomCatalogue ? 'Discover your next favourite' : 'Picked for your languages',
+          style: const TextStyle(fontSize: 27, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.0),
+        ),
         const SizedBox(height: 6),
-        const Text('Find a sound that feels like you.', style: TextStyle(color: _muted, fontSize: 13)),
+        Text(
+          _randomCatalogue
+              ? 'A randomized mix of music from everywhere.'
+              : 'Your catalogue starts with ${_selectedLanguages.take(3).join(' · ')}.',
+          style: const TextStyle(color: _muted, fontSize: 13),
+        ),
         const SizedBox(height: 23),
         Row(children: <Widget>[
           const Expanded(child: Text('Recently played', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4))),
@@ -520,6 +781,32 @@ class _MusicHomeState extends State<MusicHome> {
                   ],
                 ),
         ),
+        if (!_randomCatalogue && _selectedLanguages.isNotEmpty) ...<Widget>[
+          const Text('Your languages', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 112,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: _selectedLanguages.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (_, index) {
+                final language = _selectedLanguages.elementAt(index);
+                return SizedBox(
+                  width: 154,
+                  child: _catalogueTile(
+                    '$language music',
+                    'Personalized picks',
+                    const Color(0xFF252525),
+                    Icons.language_rounded,
+                    _catalogueLanguageTerms[language] ?? '$language music',
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 22),
+        ],
         const SizedBox(height: 25),
         Row(children: <Widget>[
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
