@@ -204,6 +204,8 @@ class _MusicHomeState extends State<MusicHome> {
   List<Track> _favorites = <Track>[];
   List<Track> _recent = <Track>[];
   List<String> _searchHistory = <String>[];
+  Future<void>? _ytMusicInitialization;
+  bool _ytMusicReady = false;
   bool _preferencesLoaded = false;
   bool _onboardingComplete = false;
   bool _randomCatalogue = true;
@@ -219,7 +221,22 @@ class _MusicHomeState extends State<MusicHome> {
   @override
   void initState() {
     super.initState();
+    _ytMusicInitialization = _initializeMusicCatalogue();
     _initialize();
+  }
+
+  Future<void> _initializeMusicCatalogue() async {
+    try {
+      await _ytMusic.initialize();
+      _ytMusicReady = true;
+    } catch (_) {
+      _ytMusicReady = false;
+      if (mounted) {
+        setState(() {
+          _error = 'Music catalogue could not connect. Check your internet and try again.';
+        });
+      }
+    }
   }
 
   Future<void> _initialize() async {
@@ -251,15 +268,6 @@ class _MusicHomeState extends State<MusicHome> {
       if (mounted) setState(() => _preferencesLoaded = true);
     }
 
-    try {
-      await _ytMusic.initialize();
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Music catalogue could not connect. Check your internet and try again.';
-        });
-      }
-    }
   }
 
   String _encodeTrack(Track track) => jsonEncode(<String, dynamic>{
@@ -504,7 +512,7 @@ class _MusicHomeState extends State<MusicHome> {
     );
     if (!mounted || selectedName == null) return;
     if (selectedName == '__create__') {
-      await _createPlaylist();
+      await _createPlaylist(seedTracks: <Track>[track]);
       return;
     }
     final tracks = _playlists[selectedName];
@@ -550,6 +558,8 @@ class _MusicHomeState extends State<MusicHome> {
       return;
     }
     try {
+      await _ytMusicInitialization;
+      if (!_ytMusicReady) throw StateError('Music catalogue is not initialized.');
       final dynamic raw = await _ytMusic.searchPlaylists(clean).timeout(const Duration(seconds: 18));
       final playlists = <_YtMusicPlaylist>[];
       final seen = <String>{};
@@ -583,6 +593,8 @@ class _MusicHomeState extends State<MusicHome> {
       _error = null;
     });
     try {
+      await _ytMusicInitialization;
+      if (!_ytMusicReady) throw StateError('Music catalogue is not initialized.');
       final dynamic raw = await _ytMusic.getPlaylistVideos(playlist.id).timeout(const Duration(seconds: 25));
       final tracks = <Track>[];
       final seen = <String>{};
@@ -764,6 +776,8 @@ class _MusicHomeState extends State<MusicHome> {
     }
 
     try {
+      await _ytMusicInitialization;
+      if (!_ytMusicReady) throw StateError('Music catalogue is not initialized.');
       final dynamic raw = await _ytMusic
           .searchSongs(clean)
           .timeout(const Duration(seconds: 18));
