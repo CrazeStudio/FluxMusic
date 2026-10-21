@@ -253,6 +253,11 @@ class _MusicHomeState extends State<MusicHome> {
       _selectedLanguages
         ..clear()
         ..addAll(prefs.getStringList('fluxmusic.catalogue_languages.v1') ?? <String>[]);
+      final savedQuality = prefs.getString('fluxmusic.audio_quality.v1');
+      fluxAudio.setAudioQuality(FluxAudioQuality.values.firstWhere(
+        (quality) => quality.name == savedQuality,
+        orElse: () => FluxAudioQuality.balanced,
+      ));
       for (final raw in prefs.getStringList('fluxmusic.playlists.v1') ?? <String>[]) {
         final entry = _decodePlaylist(raw);
         if (entry != null) _playlists[entry.key] = entry.value;
@@ -1023,7 +1028,13 @@ class _MusicHomeState extends State<MusicHome> {
   }
 
   void _openAudioEnhancements() {
-    showModalBottomSheet<void>(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, useSafeArea: true, builder: (_) => const AudioEnhancementsSheet());
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      useSafeArea: true,
+      builder: (_) => AudioEnhancementsSheet(handler: fluxAudio),
+    );
   }
 
   Widget _topBar() {
@@ -1757,7 +1768,10 @@ class _MusicHomeState extends State<MusicHome> {
 }
 
 class AudioEnhancementsSheet extends StatefulWidget {
-  const AudioEnhancementsSheet({super.key});
+  const AudioEnhancementsSheet({super.key, required this.handler});
+
+  final FluxAudioHandler handler;
+
   @override
   State<AudioEnhancementsSheet> createState() => _AudioEnhancementsSheetState();
 }
@@ -1768,7 +1782,56 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
   bool _limiter = true;
   bool _drc = false;
   bool _bassBoost = false;
+  FluxAudioQuality _quality = FluxAudioQuality.balanced;
   String? _note;
+
+  @override
+  void initState() {
+    super.initState();
+    _quality = widget.handler.audioQuality;
+    unawaited(_loadSavedEffects());
+  }
+
+  Future<void> _loadSavedEffects() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final normalization = prefs.getBool('fluxmusic.audio.normalization.v1') ?? true;
+      final limiter = prefs.getBool('fluxmusic.audio.limiter.v1') ?? true;
+      final drc = prefs.getBool('fluxmusic.audio.drc.v1') ?? false;
+      final bassBoost = prefs.getBool('fluxmusic.audio.bassBoost.v1') ?? false;
+      if (mounted) {
+        setState(() {
+          _normalization = normalization;
+          _limiter = limiter;
+          _drc = drc;
+          _bassBoost = bassBoost;
+        });
+      }
+      await _effects.invokeMethod<void>('setSettings', <String, Object>{
+        'normalization': normalization,
+        'limiter': limiter,
+        'drc': drc,
+        'bassBoost': bassBoost,
+      });
+    } catch (_) {
+      // Keep enhancement controls available even on devices without the channel.
+    }
+  }
+
+  Future<void> _setQuality(FluxAudioQuality quality) async {
+    setState(() {
+      _quality = quality;
+      _note = null;
+    });
+    widget.handler.setAudioQuality(quality);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('fluxmusic.audio_quality.v1', quality.name);
+      if (mounted) setState(() => _note = 'Quality saved. It applies on the next stream load.');
+    } catch (_) {
+      if (mounted) setState(() => _note = 'Quality applies to the next stream load; saving failed.');
+    }
+  }
 
   Future<void> _set(String key, bool value) async {
     setState(() {
@@ -1779,7 +1842,14 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       _note = null;
     });
     try {
-      await _effects.invokeMethod<void>('setSettings', <String, Object>{'normalization': _normalization, 'limiter': _limiter, 'drc': _drc, 'bassBoost': _bassBoost});
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('fluxmusic.audio.$key.v1', value);
+      await _effects.invokeMethod<void>('setSettings', <String, Object>{
+        'normalization': _normalization,
+        'limiter': _limiter,
+        'drc': _drc,
+        'bassBoost': _bassBoost,
+      });
       if (mounted) setState(() => _note = 'Audio settings updated.');
     } catch (_) {
       if (mounted) setState(() => _note = 'Start playback to apply effects on supported Android devices.');
@@ -1809,6 +1879,31 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
         ])),
       ]),
       const SizedBox(height: 18),
+      const Align(alignment: Alignment.centerLeft, child: Text('Streaming quality', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800))),
+      const SizedBox(height: 7),
+      Wrap(spacing: 7, runSpacing: 6, children: <Widget>[
+        ChoiceChip(
+          label: const Text('Data saver'),
+          selected: _quality == FluxAudioQuality.dataSaver,
+          onSelected: (selected) { if (selected) unawaited(_setQuality(FluxAudioQuality.dataSaver)); },
+        ),
+        ChoiceChip(
+          label: const Text('Balanced'),
+          selected: _quality == FluxAudioQuality.balanced,
+          onSelected: (selected) { if (selected) unawaited(_setQuality(FluxAudioQuality.balanced)); },
+        ),
+        ChoiceChip(
+          label: const Text('High'),
+          selected: _quality == FluxAudioQuality.high,
+          onSelected: (selected) { if (selected) unawaited(_setQuality(FluxAudioQuality.high)); },
+        ),
+      ]),
+      const SizedBox(height: 4),
+      const Align(
+        alignment: Alignment.centerLeft,
+        child: Text('Uses the nearest available audio bitrate; high quality may use more data. Source availability varies and this is not lossless upscaling.', style: TextStyle(color: _playerMuted, fontSize: 10.5, height: 1.35)),
+      ),
+      const SizedBox(height: 13),
       _tile(Icons.equalizer_rounded, 'Normalization', 'Android loudness compensation; per-track LUFS matching is not available yet.', _normalization, (v) => _set('normalization', v)),
       const SizedBox(height: 9),
       _tile(Icons.shield_rounded, 'Look-ahead limiter', 'Controls sudden peaks to help prevent clipping.', _limiter, (v) => _set('limiter', v)),
@@ -2587,6 +2682,7 @@ class _CoverArt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final decodeSize = (size * MediaQuery.devicePixelRatioOf(context)).round().clamp(64, 512).toInt();
     return Container(
       width: size,
       height: size,
@@ -2602,6 +2698,8 @@ class _CoverArt extends StatelessWidget {
                 fit: BoxFit.cover,
                 width: size,
                 height: size,
+                cacheWidth: decodeSize,
+                cacheHeight: decodeSize,
                 errorBuilder: (_, __, ___) => _artFallback(),
               )
             : _artFallback(),
