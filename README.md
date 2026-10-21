@@ -56,6 +56,9 @@ You can also open **Actions → Build FluxMusic APK** on GitHub after a push. Do
 
 - `lib/main.dart` — first-run personalization, catalogue, song/playlist search, local playlists, favourites, recent history, audio settings
 - `lib/models/track.dart` — normalizes YouTube Music search results
-- `lib/services/flux_audio_handler.dart` — queue, audio resolution, playback state, media session
+- `lib/models/catalogue_preferences.dart` — language choices, search phrases, and personalization mode
+- `lib/services/flux_audio_handler.dart` — queue, audio resolution, quality preference, playback state, media session
+- `test/catalogue_preferences_test.dart` — personalization model tests
+- `CHANGELOG.md` — v1.5 changes and limitations
 - `tool/patch_android.py` — adds required Android permissions and audio-service declarations to a Flutter-generated Android project
 - `.github/workflows/build-apk.yml` — builds and uploads the APK artifact
