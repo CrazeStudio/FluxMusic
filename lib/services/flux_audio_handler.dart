@@ -12,6 +12,10 @@ import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 /// than one supported client and keeps a readable error for the UI.
 enum FluxRepeatMode { off, all, one }
 
+/// Streaming source preference. This selects from the formats YouTube exposes;
+/// it cannot create lossless audio or exceed the source bitrate.
+enum FluxAudioQuality { dataSaver, balanced, high }
+
 class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   final YoutubeExplode _youtube = YoutubeExplode();
@@ -31,8 +35,17 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   int? _unshuffledQueueIndex;
   bool _autoAdvanceRunning = false;
   String? _lastPlaybackError;
+  FluxAudioQuality _audioQuality = FluxAudioQuality.balanced;
 
   bool get shuffleEnabled => _shuffleEnabled;
+  FluxAudioQuality get audioQuality => _audioQuality;
+
+  void setAudioQuality(FluxAudioQuality quality) {
+    if (_audioQuality == quality) return;
+    _audioQuality = quality;
+    // The next track load should re-order formats for the selected target.
+    _candidateCache.clear();
+  }
   int get currentQueueIndex => _queueIndex;
   bool get repeatEnabled => _repeatMode != FluxRepeatMode.off;
   FluxRepeatMode get repeatMode => _repeatMode;
@@ -82,13 +95,18 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
         .timeout(const Duration(seconds: 25))
         .then<List<dynamic>>((manifest) {
           final candidates = manifest.audioOnly.toList();
-          // A moderate bitrate usually starts faster on mobile data than
-          // always attempting the largest stream first.
-          candidates.sort((a, b) {
-            final aDelta = (a.bitrate.bitsPerSecond - 128000).abs();
-            final bDelta = (b.bitrate.bitsPerSecond - 128000).abs();
-            return aDelta.compareTo(bDelta);
-          });
+          // Prefer a format matching the user's data/quality choice, then
+          // fall back through alternatives when a specific stream is rejected.
+          if (_audioQuality == FluxAudioQuality.high) {
+            candidates.sort((a, b) => b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond));
+          } else {
+            final targetBitrate = _audioQuality == FluxAudioQuality.dataSaver ? 96000 : 128000;
+            candidates.sort((a, b) {
+              final aDelta = (a.bitrate.bitsPerSecond - targetBitrate).abs();
+              final bDelta = (b.bitrate.bitsPerSecond - targetBitrate).abs();
+              return aDelta.compareTo(bDelta);
+            });
+          }
           _candidateCache[videoId] = _CandidateCacheEntry(
             DateTime.now().add(const Duration(minutes: 3)),
             candidates,
