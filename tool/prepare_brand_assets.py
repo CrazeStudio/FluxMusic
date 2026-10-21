@@ -44,7 +44,7 @@ values_dir.mkdir(parents=True, exist_ok=True)
 (values_dir / "fluxmusic_icon_colors.xml").write_text(
     '''<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="fluxmusic_icon_background">#080B16</color>
+    <color name="fluxmusic_icon_background">#F3E8D2</color>
 </resources>
 ''',
     encoding="utf-8",
