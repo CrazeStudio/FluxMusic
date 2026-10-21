@@ -1903,7 +1903,7 @@ class _MusicHomeState extends State<MusicHome> {
                               final position = positionSnapshot.data ?? Duration.zero;
                               final progress = duration.inMilliseconds <= 0
                                   ? 0.0
-                                  : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+                                  : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0).toDouble();
                               return ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
                                 child: LinearProgressIndicator(
