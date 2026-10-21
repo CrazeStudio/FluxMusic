@@ -1,0 +1,60 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "lib/**"
+      - "assets/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/build-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop target
+        run: flutter config --enable-windows-desktop
+
+      - name: Generate Windows runner files
+        run: flutter create --platforms=windows --project-name=fluxmusic .
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze
+        continue-on-error: true
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package Windows app
+        shell: pwsh
+        run: |
+          $source = "build/windows/x64/runner/Release"
+          if (!(Test-Path "$source/fluxmusic.exe")) {
+            throw "Windows executable was not produced at $source/fluxmusic.exe"
+          }
+          Compress-Archive -Path "$source/*" -DestinationPath "FluxMusic-Windows-x64.zip" -Force
+
+      - name: Upload Windows app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FluxMusic-Windows-x64
+          path: FluxMusic-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
