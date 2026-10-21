@@ -1,18 +1,54 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <defs>
-    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F7EEDC"/><stop offset="1" stop-color="#EDE0C7"/></linearGradient>
-    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur in="SourceAlpha" stdDeviation="5"/><feOffset dx="2" dy="5" result="off"/><feComponentTransfer><feFuncA type="linear" slope=".32"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <linearGradient id="note" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFDF7"/><stop offset=".45" stop-color="#D8CFBE"/><stop offset=".72" stop-color="#FAF4E8"/><stop offset="1" stop-color="#A79D8E"/></linearGradient>
+    <pattern id="engraving" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#F3E8D2"/>
+      <path d="M0 1.1H4 M0 3.3H4" fill="none" stroke="#28231E" stroke-width=".8" opacity=".84"/>
+    </pattern>
+    <filter id="shadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3.5"/><feOffset dx="2" dy="4" result="offsetblur"/>
+      <feComponentTransfer><feFuncA type="linear" slope=".38"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="headA"><ellipse cx="112" cy="347" rx="31" ry="39" transform="rotate(31 112 347)"/></clipPath>
+    <clipPath id="headB"><ellipse cx="161" cy="191" rx="30" ry="23" transform="rotate(-24 161 191)"/></clipPath>
+    <clipPath id="headC"><ellipse cx="215" cy="369" rx="40" ry="28" transform="rotate(-24 215 369)"/></clipPath>
+    <clipPath id="headD"><ellipse cx="301" cy="376" rx="39" ry="27" transform="rotate(16 301 376)"/></clipPath>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#paper)"/>
-  <g filter="url(#shadow)" stroke="#151515" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
-    <path fill="url(#note)" d="M91 164 Q105 174 126 178 L163 183 Q205 190 222 225 Q238 257 225 293 Q220 308 210 306 Q204 304 209 290 Q219 253 196 237 Q181 227 156 229 L201 316 Q220 352 197 378 Q177 401 147 392 Q115 382 114 353 Q113 325 142 311 Q155 305 171 309 Z"/>
-    <path fill="url(#note)" d="M296 209 Q313 185 339 188 Q356 190 369 204 L382 96 Q384 82 394 94 Q405 108 426 124 Q454 147 445 175 Q439 194 424 206 Q412 216 415 201 Q437 177 425 159 Q415 143 393 129 L382 230 Q378 259 351 270 Q324 281 304 262 Q285 245 296 209 Z"/>
-    <path fill="url(#note)" d="M162 376 Q190 355 217 373 L259 291 Q263 282 274 282 L389 288 Q407 289 403 305 L375 393 Q366 418 342 425 Q317 432 300 415 Q284 399 298 380 Q312 362 335 371 L356 309 L283 306 L244 384 Q234 410 210 420 Q184 432 163 415 Q143 400 162 376 Z"/>
+  <rect width="512" height="512" fill="#F3E8D2"/>
+  <g filter="url(#shadow)" stroke="#171614" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M105 329 L54 119 Q52 111 58 110 Q63 110 66 118 L128 312" fill="url(#engraving)" stroke-width="3.8"/>
+    <path d="M57 115 C65 144 97 145 116 169 C133 190 129 216 111 232 C121 211 111 194 92 181 C75 170 57 164 49 151 Z" fill="url(#engraving)" stroke-width="3.8"/>
+    <ellipse cx="112" cy="347" rx="31" ry="39" transform="rotate(31 112 347)" fill="url(#engraving)" stroke-width="3.8"/>
+    <path d="M126 176 L180 54 Q183 47 188 52 Q192 55 190 62 L178 173" fill="url(#engraving)" stroke-width="3.8"/>
+    <path d="M185 54 C193 88 231 96 234 128 C236 148 224 164 210 171 C222 153 218 138 204 125 C192 113 178 102 178 83 Z" fill="url(#engraving)" stroke-width="3.8"/>
+    <ellipse cx="161" cy="191" rx="30" ry="23" transform="rotate(-24 161 191)" fill="url(#engraving)" stroke-width="3.8"/>
+    <path d="M214 358 L244 251 Q247 241 257 243 L360 252 Q371 253 367 264 L343 341 L329 337 L352 267 L256 258 L227 364 Z" fill="url(#engraving)" stroke-width="3.8"/>
+    <path d="M287 362 L344 259 L358 266 L311 374" fill="url(#engraving)" stroke-width="3.8"/>
+    <ellipse cx="215" cy="369" rx="40" ry="28" transform="rotate(-24 215 369)" fill="url(#engraving)" stroke-width="4"/>
+    <ellipse cx="301" cy="376" rx="39" ry="27" transform="rotate(16 301 376)" fill="url(#engraving)" stroke-width="4"/>
   </g>
-  <g fill="none" stroke="#262626" stroke-width="2.2" opacity=".8">
-    <path d="M105 174 Q146 193 174 198 Q208 206 218 240"/><path d="M117 188 Q151 204 178 209 Q205 215 213 243"/><path d="M130 203 Q161 216 185 221 Q203 225 207 247"/>
-    <path d="M307 222 Q323 205 341 207 Q355 209 365 223"/><path d="M309 235 Q326 219 344 221 Q356 222 363 235"/><path d="M310 247 Q327 233 345 235 Q354 237 359 247"/>
-    <path d="M174 388 Q190 377 206 388"/><path d="M170 399 Q189 389 204 399"/><path d="M315 391 Q331 380 347 390"/><path d="M312 402 Q330 392 345 402"/>
+  <g fill="none" stroke="#151411" stroke-width="1.25" opacity=".92">
+    <g clip-path="url(#headA)">
+      <ellipse cx="112" cy="347" rx="25" ry="32" transform="rotate(31 112 347)"/><ellipse cx="112" cy="347" rx="20" ry="26" transform="rotate(31 112 347)"/>
+      <ellipse cx="112" cy="347" rx="15" ry="20" transform="rotate(31 112 347)"/><ellipse cx="112" cy="347" rx="10" ry="14" transform="rotate(31 112 347)"/>
+      <ellipse cx="112" cy="347" rx="5" ry="7" transform="rotate(31 112 347)"/>
+    </g>
+    <g clip-path="url(#headB)">
+      <ellipse cx="161" cy="191" rx="25" ry="18" transform="rotate(-24 161 191)"/><ellipse cx="161" cy="191" rx="20" ry="14" transform="rotate(-24 161 191)"/>
+      <ellipse cx="161" cy="191" rx="15" ry="10" transform="rotate(-24 161 191)"/><ellipse cx="161" cy="191" rx="9" ry="6" transform="rotate(-24 161 191)"/>
+    </g>
+    <g clip-path="url(#headC)">
+      <ellipse cx="215" cy="369" rx="34" ry="23" transform="rotate(-24 215 369)"/><ellipse cx="215" cy="369" rx="28" ry="18" transform="rotate(-24 215 369)"/>
+      <ellipse cx="215" cy="369" rx="22" ry="14" transform="rotate(-24 215 369)"/><ellipse cx="215" cy="369" rx="16" ry="10" transform="rotate(-24 215 369)"/>
+      <ellipse cx="215" cy="369" rx="10" ry="6" transform="rotate(-24 215 369)"/>
+    </g>
+    <g clip-path="url(#headD)">
+      <ellipse cx="301" cy="376" rx="33" ry="22" transform="rotate(16 301 376)"/><ellipse cx="301" cy="376" rx="27" ry="17" transform="rotate(16 301 376)"/>
+      <ellipse cx="301" cy="376" rx="21" ry="13" transform="rotate(16 301 376)"/><ellipse cx="301" cy="376" rx="15" ry="9" transform="rotate(16 301 376)"/>
+      <ellipse cx="301" cy="376" rx="9" ry="5" transform="rotate(16 301 376)"/>
+    </g>
+  </g>
+  <g fill="none" stroke="#FFF9EC" stroke-width="1.2" opacity=".88">
+    <path d="M58 126 C73 178 87 229 101 279"/><path d="M67 127 C82 181 96 229 110 274"/>
+    <path d="M187 67 C196 94 217 103 225 124"/><path d="M250 254 L357 263"/><path d="M230 267 L211 327"/><path d="M262 268 L359 276"/>
   </g>
 </svg>
