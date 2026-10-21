@@ -321,6 +321,13 @@ class _MusicHomeState extends State<MusicHome> {
     }
   }
 
+  void _editPersonalization() {
+    setState(() {
+      _onboardingComplete = false;
+      _languageSelectionError = false;
+    });
+  }
+
   Future<void> _finishPersonalization({required bool skip}) async {
     if (!skip && _selectedLanguages.isEmpty) {
       setState(() => _languageSelectionError = true);
@@ -1047,6 +1054,19 @@ class _MusicHomeState extends State<MusicHome> {
           SizedBox(width: 31, height: 31, child: SvgPicture.asset('assets/brand/fluxmusic.svg')),
           const SizedBox(width: 9),
           const Expanded(child: Text('FluxMusic', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.8, color: _ink))),
+          Tooltip(
+            message: 'Personalize catalogue',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(22),
+              onTap: _editPersonalization,
+              child: Container(
+                width: 36, height: 36, alignment: Alignment.center,
+                decoration: BoxDecoration(color: const Color(0xFF1E1E1E), shape: BoxShape.circle, border: Border.all(color: const Color(0xFF333333))),
+                child: const Icon(Icons.language_rounded, color: _mint, size: 19),
+              ),
+            ),
+          ),
+          const SizedBox(width: 7),
           Tooltip(
             message: 'Audio settings',
             child: InkWell(
