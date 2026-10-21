@@ -645,6 +645,11 @@ class _MusicHomeState extends State<MusicHome> {
             Row(children: <Widget>[
               IconButton.filledTonal(
                 tooltip: 'Back to playlists',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xFF3A3A3A)),
+                ),
                 onPressed: () => Navigator.of(sheetContext).pop(),
                 icon: const Icon(Icons.arrow_back_rounded),
               ),
@@ -1132,7 +1137,7 @@ class _MusicHomeState extends State<MusicHome> {
               ],
             ),
             child: Padding(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(2),
               child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain),
             ),
           ),
@@ -2495,7 +2500,16 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: <Widget>[
                   IconButton(tooltip: widget.handler.shuffleEnabled ? 'Turn shuffle off' : 'Shuffle queue', onPressed: () async { await widget.handler.toggleShuffle(); if (mounted) setState(() {}); }, icon: Icon(Icons.shuffle_rounded, color: widget.handler.shuffleEnabled ? _mint : _playerMuted, size: 21)),
                   IconButton(onPressed: () => widget.handler.skipToPrevious(), icon: const Icon(Icons.skip_previous_rounded, size: 29)),
-                  Container(width: 62, height: 62, decoration: const BoxDecoration(shape: BoxShape.circle, color: _mint), child: IconButton(onPressed: () => playing ? widget.handler.pause() : widget.handler.play(), icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: _ink, size: 34))),
+                  Container(
+                    width: 62,
+                    height: 62,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black),
+                    child: IconButton(
+                      tooltip: playing ? 'Pause' : 'Play',
+                      onPressed: () => playing ? widget.handler.pause() : widget.handler.play(),
+                      icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 34),
+                    ),
+                  ),
                   IconButton(onPressed: () => widget.handler.skipToNext(), icon: const Icon(Icons.skip_next_rounded, size: 29)),
                   IconButton(
                     tooltip: switch (widget.handler.repeatMode) {
