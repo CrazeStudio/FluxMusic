@@ -418,6 +418,321 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
+  Future<void> _savePlaylists() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        'fluxmusic.playlists.v1',
+        _playlists.entries.map((entry) => jsonEncode(<String, dynamic>{
+          'name': entry.key,
+          'tracks': entry.value.map(_encodeTrack).toList(),
+        })).toList(),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Playlists could not be saved on this device.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _createPlaylist() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('Create playlist'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 48,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(hintText: 'Playlist name'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: const Text('Create')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null || name.trim().isEmpty) return;
+    final cleanName = name.trim();
+    if (_playlists.keys.any((existing) => existing.toLowerCase() == cleanName.toLowerCase())) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A playlist with that name already exists.')));
+      return;
+    }
+    setState(() {
+      _playlists[cleanName] = <Track>[];
+      _libraryFilter = 2;
+      _tab = 2;
+    });
+    await _savePlaylists();
+  }
+
+  Future<void> _addTrackToPlaylist(Track track) async {
+    if (_playlists.isEmpty) {
+      await _createPlaylist();
+      if (_playlists.isEmpty) return;
+    }
+    final selectedName = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1A1A1A),
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(8, 0, 8, 10),
+              child: Text('Add to playlist', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            ),
+            ..._playlists.keys.map((name) => ListTile(
+              leading: const Icon(Icons.queue_music_rounded, color: _mint),
+              title: Text(name),
+              subtitle: Text('${_playlists[name]?.length ?? 0} tracks'),
+              onTap: () => Navigator.of(sheetContext).pop(name),
+            )),
+            TextButton.icon(
+              onPressed: () => Navigator.of(sheetContext).pop('__create__'),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create a new playlist'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selectedName == null) return;
+    if (selectedName == '__create__') {
+      await _createPlaylist();
+      return;
+    }
+    final tracks = _playlists[selectedName];
+    if (tracks == null) return;
+    if (tracks.any((item) => item.id == track.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('That track is already in the playlist.')));
+      return;
+    }
+    setState(() => tracks.add(track));
+    await _savePlaylists();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Added to $selectedName.')));
+  }
+
+  Future<void> _searchYouTubePlaylists(String query) async {
+    final clean = query.trim();
+    if (clean.isEmpty) return;
+    final key = clean.toLowerCase();
+    final generation = ++_searchGeneration;
+    _searchController.text = clean;
+    _searchHistory.removeWhere((item) => item.toLowerCase() == key);
+    _searchHistory.insert(0, clean);
+    if (_searchHistory.length > 12) _searchHistory = _searchHistory.take(12).toList();
+    unawaited(_saveSearchHistory());
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _tab = 1;
+      _searchPlaylistsMode = true;
+      _searching = true;
+      _lastQuery = clean;
+      _error = null;
+      _ytPlaylistResults = <_YtMusicPlaylist>[];
+    });
+    final cached = _playlistSearchCache[key];
+    if (cached != null) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _ytPlaylistResults = cached;
+        _searching = false;
+        _error = cached.isEmpty ? 'No playlists found. Try a different search.' : null;
+      });
+      return;
+    }
+    try {
+      final dynamic raw = await _ytMusic.searchPlaylists(clean).timeout(const Duration(seconds: 18));
+      final playlists = <_YtMusicPlaylist>[];
+      final seen = <String>{};
+      if (raw is Iterable) {
+        for (final item in raw) {
+          final playlist = _YtMusicPlaylist.fromSource(item);
+          if (playlist.id.isNotEmpty && seen.add(playlist.id)) playlists.add(playlist);
+        }
+      }
+      if (!mounted || generation != _searchGeneration) return;
+      _playlistSearchCache[key] = List<_YtMusicPlaylist>.unmodifiable(playlists);
+      if (_playlistSearchCache.length > 20) _playlistSearchCache.remove(_playlistSearchCache.keys.first);
+      setState(() {
+        _ytPlaylistResults = playlists;
+        _searching = false;
+        _error = playlists.isEmpty ? 'No playlists found. Try a different search.' : null;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searching = false;
+        _error = 'YouTube Music playlist search is unavailable right now. Check your connection and retry.';
+      });
+    }
+  }
+
+  Future<void> _loadYouTubePlaylist(_YtMusicPlaylist playlist) async {
+    final generation = ++_searchGeneration;
+    setState(() {
+      _searching = true;
+      _error = null;
+    });
+    try {
+      final dynamic raw = await _ytMusic.getPlaylistVideos(playlist.id).timeout(const Duration(seconds: 25));
+      final tracks = <Track>[];
+      final seen = <String>{};
+      if (raw is Iterable) {
+        for (final item in raw) {
+          final track = Track.fromYouTubeMusic(item);
+          if (track.id.isNotEmpty && seen.add(track.id)) tracks.add(track);
+        }
+      }
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searchPlaylistsMode = false;
+        _searching = false;
+        _lastQuery = playlist.name;
+        _results = tracks;
+        _error = tracks.isEmpty ? 'This playlist did not return any playable track entries.' : null;
+      });
+      if (tracks.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Opened "${playlist.name}" · ${tracks.length} tracks')),
+        );
+      }
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searching = false;
+        _searchPlaylistsMode = true;
+        _error = 'Could not load that playlist. Try opening it again.';
+      });
+    }
+  }
+
+  void _openLocalPlaylist(String name) {
+    final tracks = _playlists[name];
+    if (tracks == null) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF121212),
+      showDragHandle: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * .82,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+            Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text('${tracks.length} tracks · saved on this device', style: const TextStyle(color: _muted, fontSize: 12)),
+            const SizedBox(height: 12),
+            Row(children: <Widget>[
+              FilledButton.icon(
+                onPressed: tracks.isEmpty ? null : () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_playList(tracks, 0));
+                },
+                icon: const Icon(Icons.play_arrow_rounded),
+                label: const Text('Play all'),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_createPlaylist());
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('New playlist'),
+              ),
+            ]),
+            const Divider(color: Color(0xFF333333)),
+            Expanded(
+              child: tracks.isEmpty
+                  ? const _EmptyState(icon: Icons.queue_music_rounded, title: 'This playlist is empty', subtitle: 'Search for songs and use the menu to add them here.')
+                  : ListView.builder(
+                      itemCount: tracks.length,
+                      itemBuilder: (_, index) => _trackTile(tracks[index], index, tracks),
+                    ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _playlistsPage() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      children: <Widget>[
+        Row(children: <Widget>[
+          const Expanded(child: Text('Your playlists', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink))),
+          IconButton.filledTonal(
+            tooltip: 'Create playlist',
+            onPressed: _createPlaylist,
+            icon: const Icon(Icons.add_rounded),
+          ),
+        ]),
+        const SizedBox(height: 5),
+        const Text('Playlists stay on this device. Find public YouTube Music playlists in Search.', style: TextStyle(color: _muted, fontSize: 12, height: 1.4)),
+        const SizedBox(height: 18),
+        if (_playlists.isEmpty)
+          const _EmptyState(icon: Icons.queue_music_rounded, title: 'Create your first playlist', subtitle: 'Group your favourites and search results into your own collections.')
+        else
+          ..._playlists.entries.map((entry) => Card(
+            color: const Color(0xFF1E1E1E),
+            margin: const EdgeInsets.only(bottom: 9),
+            child: ListTile(
+              leading: Container(
+                width: 48, height: 48,
+                decoration: BoxDecoration(color: const Color(0xFF29291E), borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.queue_music_rounded, color: _mint),
+              ),
+              title: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
+              subtitle: Text('${entry.value.length} tracks · local playlist'),
+              onTap: () => _openLocalPlaylist(entry.key),
+              trailing: PopupMenuButton<String>(
+                tooltip: 'Playlist options',
+                onSelected: (action) async {
+                  if (action != 'delete') return;
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: Text('Delete "${entry.key}"?'),
+                      content: const Text('This removes the local playlist, not the songs from YouTube Music.'),
+                      actions: <Widget>[
+                        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
+                        FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Delete')),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true && mounted) {
+                    setState(() => _playlists.remove(entry.key));
+                    await _savePlaylists();
+                  }
+                },
+                itemBuilder: (_) => const <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(children: <Widget>[Icon(Icons.delete_outline_rounded, size: 18), SizedBox(width: 10), Text('Delete playlist')]),
+                  ),
+                ],
+              ),
+            ),
+          )),
+      ],
+    );
+  }
+
   Future<void> _search(String query) async {
     final clean = query.trim();
     if (clean.isEmpty) return;
@@ -1048,53 +1363,126 @@ class _MusicHomeState extends State<MusicHome> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
         const Text('Search', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink)),
         const SizedBox(height: 5),
-        const Text('Find artists, songs, and more.', style: TextStyle(color: _muted, fontSize: 13)),
-        const SizedBox(height: 18),
-        _searchBox(hint: 'Search songs, artists, albums', onSubmitted: _search),
-        const SizedBox(height: 18),
+        const Text('Search songs or discover public YouTube Music playlists.', style: TextStyle(color: _muted, fontSize: 13)),
+        const SizedBox(height: 14),
+        Wrap(spacing: 8, children: <Widget>[
+          ChoiceChip(
+            label: const Text('Songs'),
+            selected: !_searchPlaylistsMode,
+            onSelected: (_) => setState(() {
+              _searchPlaylistsMode = false;
+              _lastQuery = '';
+              _searching = false;
+              _error = null;
+            }),
+          ),
+          ChoiceChip(
+            label: const Text('Playlists'),
+            selected: _searchPlaylistsMode,
+            onSelected: (_) => setState(() {
+              _searchPlaylistsMode = true;
+              _lastQuery = '';
+              _searching = false;
+              _error = null;
+            }),
+          ),
+        ]),
+        const SizedBox(height: 12),
+        _searchBox(
+          hint: _searchPlaylistsMode ? 'Search YouTube Music playlists' : 'Search songs, artists, albums',
+          onSubmitted: _searchPlaylistsMode ? _searchYouTubePlaylists : _search,
+        ),
+        const SizedBox(height: 14),
         if (_lastQuery.isEmpty)
-          Expanded(child: ListView(padding: const EdgeInsets.only(bottom: 16), children: <Widget>[
-            const Text('Browse categories', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
-            const SizedBox(height: 10),
-            Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
-              _genreTile('Electronic', const Color(0xFF25202B), 'electronic music'),
-              _genreTile('Chill', const Color(0xFF202820), 'chill music'),
-              _genreTile('Indie', const Color(0xFF2A211F), 'indie music'),
-              _genreTile('Focus', const Color(0xFF29291E), 'focus music'),
-              _genreTile('Hip-hop', const Color(0xFF2A2026), 'hip hop'),
-              _genreTile('Ambient', const Color(0xFF20262B), 'ambient music'),
-            ]),
-            const SizedBox(height: 22),
-            Row(children: <Widget>[
-              Expanded(child: Text(_searchHistory.isEmpty ? 'Try a search' : 'Recent searches', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-              if (_searchHistory.isNotEmpty) TextButton(onPressed: _clearSearchHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: const Text('Clear', style: TextStyle(fontSize: 11))),
-            ]),
-            const SizedBox(height: 4),
-            if (_searchHistory.isNotEmpty)
-              ..._searchHistory.take(5).map((query) => ListTile(
-                contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.history_rounded, color: _muted, size: 19),
-                title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                trailing: const Icon(Icons.north_west_rounded, color: _muted, size: 16), onTap: () => _search(query),
-              ))
-            else
-              ...<String>['After Dark', 'Lo-fi beats', 'Anime openings'].map((query) => ListTile(
-                contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.search_rounded, color: _muted, size: 18),
-                title: Text(query, style: const TextStyle(fontSize: 13)), trailing: const Icon(Icons.north_west_rounded, color: _muted, size: 16),
-                onTap: () => _search(query),
-              )),
-          ]))
+          Expanded(
+            child: _searchPlaylistsMode
+                ? const _EmptyState(
+                    icon: Icons.queue_music_rounded,
+                    title: 'Find a playlist',
+                    subtitle: 'Search YouTube Music, then open a result to load its track list.',
+                  )
+                : ListView(padding: const EdgeInsets.only(bottom: 16), children: <Widget>[
+                    const Text('Browse categories', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
+                    const SizedBox(height: 10),
+                    Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
+                      _genreTile('Electronic', const Color(0xFF25202B), 'electronic music'),
+                      _genreTile('Chill', const Color(0xFF202820), 'chill music'),
+                      _genreTile('Indie', const Color(0xFF2A211F), 'indie music'),
+                      _genreTile('Focus', const Color(0xFF29291E), 'focus music'),
+                      _genreTile('Hip-hop', const Color(0xFF2A2026), 'hip hop'),
+                      _genreTile('Ambient', const Color(0xFF20262B), 'ambient music'),
+                    ]),
+                    const SizedBox(height: 22),
+                    Row(children: <Widget>[
+                      Expanded(child: Text(_searchHistory.isEmpty ? 'Try a search' : 'Recent searches', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+                      if (_searchHistory.isNotEmpty) TextButton(onPressed: _clearSearchHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: const Text('Clear', style: TextStyle(fontSize: 11))),
+                    ]),
+                    const SizedBox(height: 4),
+                    if (_searchHistory.isNotEmpty)
+                      ..._searchHistory.take(5).map((query) => ListTile(
+                        contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.history_rounded, color: _muted, size: 19),
+                        title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                        trailing: const Icon(Icons.north_west_rounded, color: _muted, size: 16), onTap: () => _search(query),
+                      ))
+                    else
+                      ...<String>['After Dark', 'Lo-fi beats', 'Anime openings'].map((query) => ListTile(
+                        contentPadding: EdgeInsets.zero, dense: true, leading: const Icon(Icons.search_rounded, color: _muted, size: 18),
+                        title: Text(query, style: const TextStyle(fontSize: 13)), trailing: const Icon(Icons.north_west_rounded, color: _muted, size: 16),
+                        onTap: () => _search(query),
+                      )),
+                  ]),
+          )
         else
-          Expanded(child: _searching
-            ? const Center(child: CircularProgressIndicator(color: _mint))
-            : _error != null && _results.isEmpty
-              ? _ErrorState(message: _error!, onRetry: () => _search(_lastQuery))
-              : _results.isEmpty
-                ? const _EmptyState(icon: Icons.search_rounded, title: 'No songs found', subtitle: 'Try another song, artist, or search term.')
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 14), itemCount: _results.length,
-                    itemBuilder: (_, index) => _trackTile(_results[index], index, _results),
-                  )),
+          Expanded(
+            child: _searching
+                ? const Center(child: CircularProgressIndicator(color: _mint))
+                : _searchPlaylistsMode
+                    ? _onlinePlaylistResults()
+                    : _error != null && _results.isEmpty
+                        ? _ErrorState(message: _error!, onRetry: () => _search(_lastQuery))
+                        : _results.isEmpty
+                            ? const _EmptyState(icon: Icons.search_rounded, title: 'No songs found', subtitle: 'Try another song, artist, or search term.')
+                            : ListView.builder(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                itemCount: _results.length,
+                                itemBuilder: (_, index) => _trackTile(_results[index], index, _results),
+                              ),
+          ),
       ]),
+    );
+  }
+
+  Widget _onlinePlaylistResults() {
+    if (_error != null && _ytPlaylistResults.isEmpty) {
+      return _ErrorState(message: _error!, onRetry: () => _searchYouTubePlaylists(_lastQuery));
+    }
+    if (_ytPlaylistResults.isEmpty) {
+      return const _EmptyState(icon: Icons.queue_music_rounded, title: 'No playlists found', subtitle: 'Try a different title, artist, or mood.');
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 14),
+      itemCount: _ytPlaylistResults.length,
+      itemBuilder: (_, index) {
+        final playlist = _ytPlaylistResults[index];
+        final detail = <String>[
+          if (playlist.artist.isNotEmpty) playlist.artist,
+          if (playlist.trackCount.isNotEmpty) '${playlist.trackCount} tracks',
+          'YouTube Music',
+        ].join(' · ');
+        return Card(
+          color: const Color(0xFF1E1E1E),
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: playlist.thumbnailUrl.isEmpty
+                ? const CircleAvatar(backgroundColor: Color(0xFF29291E), child: Icon(Icons.queue_music_rounded, color: _mint))
+                : _CoverArt(url: playlist.thumbnailUrl, size: 48, radius: 11),
+            title: Text(playlist.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+            subtitle: Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 10)),
+            trailing: const Icon(Icons.open_in_new_rounded, color: _mint, size: 19),
+            onTap: () => _loadYouTubePlaylist(playlist),
+          ),
+        );
+      },
     );
   }
 
@@ -1119,6 +1507,7 @@ class _MusicHomeState extends State<MusicHome> {
   }
 
   Widget _libraryPage() {
+    if (_libraryFilter == 2) return _playlistsPage();
     final showingRecent = _libraryFilter == 1;
     final visibleTracks = showingRecent ? _recent : _favorites;
     return ListView(
@@ -1128,7 +1517,11 @@ class _MusicHomeState extends State<MusicHome> {
         const SizedBox(height: 5),
         const Text('Your music, all together.', style: TextStyle(color: _muted, fontSize: 13)),
         const SizedBox(height: 18),
-        Row(children: <Widget>[_libraryChip('Liked songs', 0), const SizedBox(width: 8), _libraryChip('Recently played', 1)]),
+        Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
+          _libraryChip('Liked songs', 0),
+          _libraryChip('Recently played', 1),
+          _libraryChip('Playlists', 2),
+        ]),
         const SizedBox(height: 17),
         Container(
           height: 130, clipBehavior: Clip.antiAlias, padding: const EdgeInsets.all(16),
@@ -1247,9 +1640,13 @@ class _MusicHomeState extends State<MusicHome> {
               icon: Icon(favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: favorite ? _mint : _muted, size: 20),
             ),
             PopupMenuButton<String>(
-              tooltip: 'Queue options',
+              tooltip: 'Track options',
               icon: const Icon(Icons.more_vert_rounded, color: _muted, size: 21),
               onSelected: (action) {
+                if (action == 'playlist') {
+                  unawaited(_addTrackToPlaylist(track));
+                  return;
+                }
                 final item = track.toMediaItem();
                 if (action == 'next') {
                   fluxAudio.playNext(item);
@@ -1279,6 +1676,14 @@ class _MusicHomeState extends State<MusicHome> {
                     Icon(Icons.queue_music_rounded, size: 18),
                     SizedBox(width: 10),
                     Text('Add to queue'),
+                  ]),
+                ),
+                PopupMenuItem<String>(
+                  value: 'playlist',
+                  child: Row(children: <Widget>[
+                    Icon(Icons.playlist_add_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Add to playlist'),
                   ]),
                 ),
               ],
