@@ -636,16 +636,34 @@ class _MusicHomeState extends State<MusicHome> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: const Color(0xFF121212),
-      showDragHandle: true,
+      showDragHandle: false,
       builder: (sheetContext) => SizedBox(
-        height: MediaQuery.sizeOf(sheetContext).height * .82,
+        height: MediaQuery.sizeOf(sheetContext).height * .88,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text('${tracks.length} tracks · saved on this device', style: const TextStyle(color: _muted, fontSize: 12)),
-            const SizedBox(height: 12),
+            Row(children: <Widget>[
+              IconButton.filledTonal(
+                tooltip: 'Back to playlists',
+                onPressed: () => Navigator.of(sheetContext).pop(),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800))),
+              IconButton(
+                tooltip: 'Playlist options',
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _createPlaylist();
+                },
+                icon: const Icon(Icons.add_rounded),
+              ),
+            ]),
+            Padding(
+              padding: const EdgeInsets.only(left: 8, top: 3),
+              child: Text('${tracks.length} songs', style: const TextStyle(color: _muted, fontSize: 12)),
+            ),
+            const SizedBox(height: 14),
             Row(children: <Widget>[
               FilledButton.icon(
                 onPressed: tracks.isEmpty ? null : () {
@@ -692,23 +710,32 @@ class _MusicHomeState extends State<MusicHome> {
             icon: const Icon(Icons.add_rounded),
           ),
         ]),
-        const SizedBox(height: 5),
-        const Text('Playlists stay on this device. Find public YouTube Music playlists in Search.', style: TextStyle(color: _muted, fontSize: 12, height: 1.4)),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
         if (_playlists.isEmpty)
           const _EmptyState(icon: Icons.queue_music_rounded, title: 'Create your first playlist', subtitle: 'Group your favourites and search results into your own collections.')
         else
-          ..._playlists.entries.map((entry) => Card(
-            color: const Color(0xFF1E1E1E),
-            margin: const EdgeInsets.only(bottom: 9),
+          ..._playlists.entries.map((entry) => Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFF303030)),
+            ),
             child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               leading: Container(
-                width: 48, height: 48,
-                decoration: BoxDecoration(color: const Color(0xFF29291E), borderRadius: BorderRadius.circular(12)),
-                child: const Icon(Icons.queue_music_rounded, color: _mint),
+                width: 54, height: 54,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: <Color>[Color(0xFF777B43), Color(0xFF34351F)]),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.queue_music_rounded, color: Colors.white, size: 27),
               ),
-              title: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800)),
-              subtitle: Text('${entry.value.length} tracks · local playlist'),
+              title: Text(entry.key, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 5),
+                child: Text('${entry.value.length} songs', style: const TextStyle(color: _muted, fontSize: 12)),
+              ),
               onTap: () => _openLocalPlaylist(entry.key),
               trailing: PopupMenuButton<String>(
                 tooltip: 'Playlist options',
@@ -1052,8 +1079,21 @@ class _MusicHomeState extends State<MusicHome> {
       child: SizedBox(
         height: 42,
         child: Row(children: <Widget>[
-          SizedBox(width: 36, height: 36, child: Center(child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain))),
-          const SizedBox(width: 9),
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0xFF24251D),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF3A3B2A)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(5),
+              child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain),
+            ),
+          ),
+          const SizedBox(width: 11),
           const Expanded(child: Text('FluxMusic', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.8, color: _ink))),
           Tooltip(
             message: 'Personalize catalogue',
