@@ -355,7 +355,7 @@ class _MusicHomeState extends State<MusicHome> {
             padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
               Row(children: <Widget>[
-                SizedBox(width: 44, height: 44, child: SvgPicture.asset('assets/brand/fluxmusic.svg')),
+                SizedBox(width: 44, height: 44, child: Center(child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain))),
                 const SizedBox(width: 12),
                 const Text('FluxMusic', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8)),
               ]),
@@ -1052,7 +1052,7 @@ class _MusicHomeState extends State<MusicHome> {
       child: SizedBox(
         height: 42,
         child: Row(children: <Widget>[
-          SizedBox(width: 31, height: 31, child: SvgPicture.asset('assets/brand/fluxmusic.svg')),
+          SizedBox(width: 36, height: 36, child: Center(child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain))),
           const SizedBox(width: 9),
           const Expanded(child: Text('FluxMusic', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.8, color: _ink))),
           Tooltip(
@@ -1094,18 +1094,7 @@ class _MusicHomeState extends State<MusicHome> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
       children: <Widget>[
-        Text(
-          personalized ? 'Picked for your languages' : 'Discover your next favourite',
-          style: const TextStyle(fontSize: 27, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.0),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          personalized
-              ? 'Your catalogue starts with ${_selectedLanguages.take(3).join(' · ')}.'
-              : 'A randomized mix of music from everywhere.',
-          style: const TextStyle(color: _muted, fontSize: 13),
-        ),
-        const SizedBox(height: 23),
+        const SizedBox(height: 4),
         Row(children: <Widget>[
           const Expanded(child: Text('Recently played', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4))),
           if (recent.isNotEmpty)
@@ -1161,9 +1150,7 @@ class _MusicHomeState extends State<MusicHome> {
         const SizedBox(height: 25),
         Row(children: <Widget>[
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            Text('Recommended for you', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
-            SizedBox(height: 3),
-            Text('Pick a mood, we’ll find the music.', style: TextStyle(color: _muted, fontSize: 11)),
+            Text('For you', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
           ])),
           TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: const Text('Explore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
         ]),
@@ -1183,9 +1170,7 @@ class _MusicHomeState extends State<MusicHome> {
         const SizedBox(height: 24),
         Row(children: <Widget>[
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            Text('Browse categories', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
-            SizedBox(height: 3),
-            Text('A soundtrack for every side of you', style: TextStyle(color: _muted, fontSize: 11)),
+            Text('Categories', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
           ])),
           TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: const Text('Browse all ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
         ]),
@@ -1216,6 +1201,18 @@ class _MusicHomeState extends State<MusicHome> {
           padding: const EdgeInsets.only(top: 8),
           child: Text(_error!, style: const TextStyle(color: _muted, fontSize: 11)),
         ),
+        const SizedBox(height: 28),
+        Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(width: 22, height: 22, child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain)),
+              const SizedBox(width: 8),
+              const Text('CrazeStudio', style: TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -1395,8 +1392,6 @@ class _MusicHomeState extends State<MusicHome> {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
         const Text('Search', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink)),
-        const SizedBox(height: 5),
-        const Text('Search songs or discover public YouTube Music playlists.', style: TextStyle(color: _muted, fontSize: 13)),
         const SizedBox(height: 14),
         Wrap(spacing: 8, children: <Widget>[
           ChoiceChip(
@@ -1575,9 +1570,7 @@ class _MusicHomeState extends State<MusicHome> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       children: <Widget>[
-        const Text('Your library', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink)),
-        const SizedBox(height: 5),
-        const Text('Your music, all together.', style: TextStyle(color: _muted, fontSize: 13)),
+        const Text('Library', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink)),
         const SizedBox(height: 18),
         Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
           _libraryChip('Liked songs', 0),
@@ -1591,7 +1584,6 @@ class _MusicHomeState extends State<MusicHome> {
           child: Stack(children: <Widget>[
             Positioned(right: -5, top: -15, child: Icon(Icons.favorite_rounded, size: 115, color: Colors.white.withValues(alpha: .13))),
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-              const Text('YOUR COLLECTION', style: TextStyle(color: _mint, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.1)),
               const Spacer(),
               Text(showingRecent ? 'Recently played' : 'Liked songs', style: const TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.4)),
               const SizedBox(height: 3),
