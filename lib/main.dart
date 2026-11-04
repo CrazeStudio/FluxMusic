@@ -31,7 +31,6 @@ late final MusicCatalog fluxCatalog;
 late final AppearanceController fluxAppearance;
 late final ListeningStats fluxStats;
 late final AutoplayRadio fluxRadio;
-Timer? _queuePersistenceTimer;
 
 const _ink = Color(0xFFF5F5F5);
 const _cardInk = Color(0xFF29261F);
@@ -156,7 +155,7 @@ Future<void> main() async {
   if (savedQueue != null) {
     await fluxAudio.restoreQueue(savedQueue.items, index: savedQueue.index, position: savedQueue.position);
   }
-  _queuePersistenceTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+  Timer.periodic(const Duration(seconds: 8), (_) {
     unawaited(QueueStore.save(fluxAudio.queue.value, fluxAudio.currentQueueIndex, fluxAudio.currentPosition));
   });
   runApp(const FluxMusicApp());
@@ -1167,6 +1166,7 @@ class _MusicHomeState extends State<MusicHome> {
 
   Future<void> _importPlaylistsFromClipboard() async {
     final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
     final controller = TextEditingController(text: clipboard?.text ?? '');
     final raw = await showDialog<String>(
       context: context,
