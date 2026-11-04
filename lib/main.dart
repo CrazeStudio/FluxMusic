@@ -2127,6 +2127,7 @@ class AppSettingsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    var radioValue = radioEnabled;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       decoration: const BoxDecoration(
@@ -2174,14 +2175,17 @@ class AppSettingsSheet extends StatelessWidget {
                 const SizedBox(height: 20),
                 _sectionLabel('YOUR MUSIC'),
                 const SizedBox(height: 9),
-                SwitchListTile(
+                StatefulBuilder(builder: (context, setSheetState) => SwitchListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                   title: const Text('Autoplay radio', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                   subtitle: const Text('Add related tracks when the queue is nearly finished', style: TextStyle(color: _playerMuted, fontSize: 11)),
-                  value: radioEnabled,
-                  onChanged: onRadioChanged,
+                  value: radioValue,
+                  onChanged: (value) {
+                    setSheetState(() => radioValue = value);
+                    onRadioChanged(value);
+                  },
                   activeThumbColor: _mint,
-                ),
+                )),
                 _row(icon: Icons.insights_rounded, title: 'Listening statistics', subtitle: 'Your most-played artists and tracks · stored locally', onTap: onStats),
                 const SizedBox(height: 8),
                 _row(icon: Icons.file_upload_outlined, title: 'Export playlists', subtitle: 'Copy a portable JSON backup to clipboard', onTap: onExport),
