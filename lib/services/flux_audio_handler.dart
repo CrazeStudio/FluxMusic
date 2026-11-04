@@ -27,6 +27,14 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   DateTime? _sleepTimerEndsAt;
   final ValueNotifier<Duration?> sleepTimerRemaining = ValueNotifier<Duration?>(null);
 
+  /// True while "pause at the end of this track" is armed.
+  final ValueNotifier<bool> sleepAtEndOfTrack = ValueNotifier<bool>(false);
+
+  /// Fires every time a track actually starts loading, including tracks that
+  /// auto-advance. Use it to record listening history.
+  final StreamController<MediaItem> _trackStarted = StreamController<MediaItem>.broadcast();
+  Stream<MediaItem> get trackStarted => _trackStarted.stream;
+
   int _queueIndex = 0;
   int _loadGeneration = 0;
   bool _shuffleEnabled = false;
@@ -36,6 +44,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   bool _autoAdvanceRunning = false;
   String? _lastPlaybackError;
   FluxAudioQuality _audioQuality = FluxAudioQuality.balanced;
+  Duration? _resumePosition;
 
   bool get shuffleEnabled => _shuffleEnabled;
   FluxAudioQuality get audioQuality => _audioQuality;
@@ -46,19 +55,32 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     // The next track load should re-order formats for the selected target.
     _candidateCache.clear();
   }
+
   int get currentQueueIndex => _queueIndex;
   bool get repeatEnabled => _repeatMode != FluxRepeatMode.off;
   FluxRepeatMode get repeatMode => _repeatMode;
   String? get lastPlaybackError => _lastPlaybackError;
   DateTime? get sleepTimerEndsAt => _sleepTimerEndsAt;
+  Duration get currentPosition => _player.position;
 
-  void setSleepTimer(Duration? duration) {
+  void _clearSleepTimer() {
     _sleepTimer?.cancel();
     _sleepTimerTicker?.cancel();
     _sleepTimer = null;
     _sleepTimerTicker = null;
     _sleepTimerEndsAt = null;
     sleepTimerRemaining.value = null;
+  }
+
+  /// Arms or cancels "pause when this track ends". Cancels any timed timer.
+  void setSleepAtEndOfTrack(bool enabled) {
+    if (enabled) _clearSleepTimer();
+    sleepAtEndOfTrack.value = enabled;
+  }
+
+  void setSleepTimer(Duration? duration) {
+    _clearSleepTimer();
+    sleepAtEndOfTrack.value = false;
     if (duration == null || duration <= Duration.zero) return;
 
     _sleepTimerEndsAt = DateTime.now().add(duration);
@@ -70,11 +92,7 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
       sleepTimerRemaining.value = remaining.isNegative ? Duration.zero : remaining;
     });
     _sleepTimer = Timer(duration, () {
-      _sleepTimerTicker?.cancel();
-      _sleepTimerTicker = null;
-      _sleepTimer = null;
-      _sleepTimerEndsAt = null;
-      sleepTimerRemaining.value = null;
+      _clearSleepTimer();
       unawaited(pause().catchError((Object error) {
         _setError(error);
       }));
@@ -215,18 +233,30 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     ));
   }
 
+  /// Replaces the queue and starts playing. Repeat mode is kept (it is a user
+  /// setting); shuffle is reset because the queue itself is new.
   Future<void> playTracks(List<MediaItem> items, {int startIndex = 0}) async {
     if (items.isEmpty) return;
     queue.add(List<MediaItem>.unmodifiable(items));
     _shuffleEnabled = false;
-    _repeatMode = FluxRepeatMode.off;
     _unshuffledQueue = null;
     _unshuffledQueueIndex = null;
-    await _player.setLoopMode(LoopMode.off);
+    await _player.setLoopMode(_repeatMode == FluxRepeatMode.one ? LoopMode.one : LoopMode.off);
     final safeIndex = startIndex.clamp(0, items.length - 1).toInt();
     await skipToQueueItem(safeIndex);
   }
 
+  /// Restores a saved queue without starting playback. The first call to
+  /// play() loads the stream and seeks to [position].
+  Future<void> restoreQueue(List<MediaItem> items, {int index = 0, Duration position = Duration.zero}) async {
+    if (items.isEmpty) return;
+    final safeIndex = index.clamp(0, items.length - 1).toInt();
+    queue.add(List<MediaItem>.unmodifiable(items));
+    _queueIndex = safeIndex;
+    _resumePosition = position > Duration.zero ? position : null;
+    mediaItem.add(items[safeIndex]);
+    _publishPlaybackState();
+  }
 
   Future<void> toggleShuffle() async {
     final currentQueue = queue.value;
@@ -342,6 +372,15 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   Future<void> _advanceAfterCompletion() async {
     if (_autoAdvanceRunning) return;
+    // "Pause at end of track" sleep timer.
+    if (sleepAtEndOfTrack.value) {
+      sleepAtEndOfTrack.value = false;
+      try {
+        await _player.pause();
+      } catch (_) {}
+      _publishPlaybackState();
+      return;
+    }
     _autoAdvanceRunning = true;
     Object? lastError;
     var failures = 0;
@@ -424,8 +463,16 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
               ),
             ).timeout(const Duration(seconds: 22));
             if (generation != _loadGeneration) return;
+            final resume = _resumePosition;
+            _resumePosition = null;
+            if (resume != null) {
+              try {
+                await _player.seek(resume);
+              } catch (_) {}
+            }
             _lastPlaybackError = null;
             _publishPlaybackState();
+            if (!_trackStarted.isClosed) _trackStarted.add(item);
             unawaited(_attachAudioEffects());
             unawaited(_playSafely(generation));
             _prefetchNextManifest();
@@ -472,17 +519,17 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   @override
   Future<void> play() async {
-    // A tap on Play after a failed stream should resolve a fresh URL, not
-    // silently return while the old error remains set.
-    if (_lastPlaybackError != null) {
-      final current = mediaItem.value;
-      if (current != null) {
-        try {
-          await _loadAndPlay(current);
-        } catch (_) {
-          // _loadAndPlay already publishes a readable error in playbackState.
-          // Keep the tap handler from leaking an unhandled async exception.
-        }
+    // A tap on Play after a failed stream, or after restoreQueue(), should
+    // resolve a fresh URL instead of returning silently.
+    final current = mediaItem.value;
+    final needsLoad = _lastPlaybackError != null ||
+        (current != null && _player.audioSource == null);
+    if (needsLoad && current != null) {
+      try {
+        await _loadAndPlay(current);
+      } catch (_) {
+        // _loadAndPlay already publishes a readable error in playbackState.
+        // Keep the tap handler from leaking an unhandled async exception.
       }
       return;
     }
@@ -543,18 +590,15 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
     final items = queue.value;
     if (index < 0 || index >= items.length) return;
     _queueIndex = index;
+    _resumePosition = null;
     await _loadAndPlay(items[index]);
   }
 
   @override
   Future<void> stop() async {
     ++_loadGeneration;
-    _sleepTimer?.cancel();
-    _sleepTimerTicker?.cancel();
-    _sleepTimer = null;
-    _sleepTimerTicker = null;
-    _sleepTimerEndsAt = null;
-    sleepTimerRemaining.value = null;
+    _clearSleepTimer();
+    sleepAtEndOfTrack.value = false;
     _lastPlaybackError = null;
     await _player.stop();
     mediaItem.add(null);
@@ -563,14 +607,14 @@ class FluxAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
 
   Future<void> disposePlayer() async {
     ++_loadGeneration;
-    _sleepTimer?.cancel();
-    _sleepTimerTicker?.cancel();
+    _clearSleepTimer();
     sleepTimerRemaining.dispose();
+    sleepAtEndOfTrack.dispose();
+    await _trackStarted.close();
     _youtube.close();
     await _player.dispose();
   }
 }
-
 
 class _CandidateCacheEntry {
   const _CandidateCacheEntry(this.expiresAt, this.candidates);
