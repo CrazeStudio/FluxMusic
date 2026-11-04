@@ -9,6 +9,8 @@ class Track {
     required this.title,
     required this.artist,
     this.album = '',
+    this.artistId = '',
+    this.albumId = '',
     this.thumbnailUrl = '',
     this.durationText = '',
   });
@@ -17,6 +19,8 @@ class Track {
   final String title;
   final String artist;
   final String album;
+  final String artistId;
+  final String albumId;
   final String thumbnailUrl;
   final String durationText;
 
@@ -26,6 +30,10 @@ class Track {
       switch (field) {
         case 'videoId':
           return object.videoId;
+        case 'browseId':
+          return object.browseId;
+        case 'id':
+          return object.id;
         case 'name':
           return object.name;
         case 'title':
@@ -87,6 +95,9 @@ class Track {
         ? _string(_read(source, 'name'))
         : _string(_read(source, 'title'));
     final rawArtist = _read(source, 'artist');
+    final artistId = _string(_read(rawArtist, 'browseId')).isNotEmpty
+        ? _string(_read(rawArtist, 'browseId'))
+        : _string(_read(rawArtist, 'id'));
     var artist = _string(_read(rawArtist, 'name'));
     if (artist.isEmpty) {
       final artists = _read(source, 'artists');
@@ -101,6 +112,9 @@ class Track {
     }
 
     final albumValue = _read(source, 'album');
+    final albumId = _string(_read(albumValue, 'browseId')).isNotEmpty
+        ? _string(_read(albumValue, 'browseId'))
+        : _string(_read(albumValue, 'id'));
     final album = _string(_read(albumValue, 'name')).isNotEmpty
         ? _string(_read(albumValue, 'name'))
         : _string(albumValue);
@@ -110,6 +124,8 @@ class Track {
       title: title.isEmpty ? 'Unknown track' : title,
       artist: artist.isEmpty ? 'Unknown artist' : artist,
       album: album,
+      artistId: artistId,
+      albumId: albumId,
       thumbnailUrl: _thumbnail(source),
       durationText: _string(_read(source, 'durationText')).isNotEmpty
           ? _string(_read(source, 'durationText'))
@@ -124,6 +140,8 @@ class Track {
         title: item.title,
         artist: item.artist ?? 'Unknown artist',
         album: item.album ?? '',
+        artistId: _string(item.extras?['artistId']),
+        albumId: _string(item.extras?['albumId']),
         thumbnailUrl: _string(item.extras?['thumbnailUrl']),
         durationText: _string(item.extras?['durationText']),
       );
@@ -138,6 +156,8 @@ class Track {
           'videoId': id,
           'thumbnailUrl': thumbnailUrl,
           'durationText': durationText,
+          'artistId': artistId,
+          'albumId': albumId,
         },
       );
 }
