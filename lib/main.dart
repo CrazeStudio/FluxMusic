@@ -14,8 +14,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'models/catalogue_preferences.dart';
 import 'models/track.dart';
 import 'services/flux_audio_handler.dart';
+import 'services/autoplay_radio.dart';
+import 'services/listening_stats.dart';
+import 'services/music_catalog.dart';
+import 'services/queue_store.dart';
+import 'theme/appearance_controller.dart';
+import 'widgets/art_gradient.dart';
+import 'widgets/search_suggestions.dart';
+import 'widgets/skeleton.dart';
 
 late final FluxAudioHandler fluxAudio;
+late final YTMusic fluxYtMusic;
+late final MusicCatalog fluxCatalog;
+late final AppearanceController fluxAppearance;
+late final ListeningStats fluxStats;
+late final AutoplayRadio fluxRadio;
+Timer? _queuePersistenceTimer;
 
 const _ink = Color(0xFFF5F5F5);
 const _cardInk = Color(0xFF29261F);
@@ -125,6 +139,24 @@ Future<void> main() async {
       androidStopForegroundOnPause: true,
     ),
   );
+  fluxYtMusic = YTMusic();
+  fluxCatalog = MusicCatalog(fluxYtMusic);
+  fluxAppearance = AppearanceController();
+  await fluxAppearance.load();
+  fluxStats = ListeningStats();
+  await fluxStats.load();
+  fluxRadio = AutoplayRadio(fluxAudio, fluxCatalog.related)..start();
+  fluxAudio.trackStarted.listen((item) {
+    fluxStats.record(item);
+    unawaited(fluxStats.save());
+  });
+  final savedQueue = await QueueStore.load();
+  if (savedQueue != null) {
+    await fluxAudio.restoreQueue(savedQueue.items, index: savedQueue.index, position: savedQueue.position);
+  }
+  _queuePersistenceTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    unawaited(QueueStore.save(fluxAudio.queue.value, fluxAudio.currentQueueIndex, fluxAudio.currentPosition));
+  });
   runApp(const FluxMusicApp());
 }
 
@@ -132,53 +164,15 @@ class FluxMusicApp extends StatelessWidget {
   const FluxMusicApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final base = ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xFF121212),
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: _mint,
-        brightness: Brightness.dark,
-        surface: const Color(0xFF1E1E1E),
-      ),
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.2, color: _ink),
-        headlineMedium: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.7, color: _ink),
-        titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _ink),
-        titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _ink),
-        bodyMedium: TextStyle(fontSize: 14, color: _muted),
-      ),
-      appBarTheme: const AppBarTheme(backgroundColor: Color(0xFF121212), foregroundColor: _ink, surfaceTintColor: Colors.transparent),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: const Color(0xFF121212),
-        indicatorColor: _mint.withValues(alpha: .15),
-        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>(
-          (states) => TextStyle(
-            fontSize: 10,
-            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w500,
-            color: states.contains(WidgetState.selected) ? _ink : _muted,
-          ),
-        ),
-      ),
-      inputDecorationTheme: const InputDecorationTheme(
-        hintStyle: TextStyle(color: Color(0xFF9E9E9E), fontSize: 13),
-      ),
-      sliderTheme: const SliderThemeData(
-        activeTrackColor: _mint,
-        thumbColor: _mint,
-        inactiveTrackColor: Color(0xFF444444),
-        overlayColor: Color(0x22777B43),
-      ),
-      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-    );
-    return MaterialApp(
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: fluxAppearance,
+    builder: (context, _) => MaterialApp(
       title: 'FluxMusic',
       debugShowCheckedModeBanner: false,
-      theme: base,
+      theme: fluxAppearance.theme,
       home: const MusicHome(),
-    );
-  }
+    ),
+  );
 }
 
 class MusicHome extends StatefulWidget {
@@ -189,12 +183,13 @@ class MusicHome extends StatefulWidget {
 }
 
 class _MusicHomeState extends State<MusicHome> {
-  final YTMusic _ytMusic = YTMusic();
+  final YTMusic _ytMusic = fluxYtMusic;
   final TextEditingController _searchController = TextEditingController();
 
   int _tab = 0;
   int _libraryFilter = 0;
   bool _searching = false;
+  String _searchQueryDraft = '';
   String? _error;
   String _lastQuery = '';
   List<Track> _results = <Track>[];
@@ -800,6 +795,7 @@ class _MusicHomeState extends State<MusicHome> {
     final generation = ++_searchGeneration;
 
     _searchController.text = clean;
+    _searchQueryDraft = clean;
     _searchHistory.removeWhere((item) => item.toLowerCase() == searchKey);
     _searchHistory.insert(0, clean);
     if (_searchHistory.length > 12) _searchHistory = _searchHistory.take(12).toList();
@@ -1518,7 +1514,10 @@ class _MusicHomeState extends State<MusicHome> {
         _searchBox(
           hint: _searchPlaylistsMode ? 'Search YouTube Music playlists' : 'Search songs, artists, albums',
           onSubmitted: _searchPlaylistsMode ? _searchYouTubePlaylists : _search,
+          onChanged: (value) => setState(() => _searchQueryDraft = value),
         ),
+        if (!_searchPlaylistsMode && _searchQueryDraft.trim().length >= 2 && _lastQuery.isEmpty)
+          SearchSuggestions(query: _searchQueryDraft, fetch: fluxCatalog.suggestions, onPick: _search),
         const SizedBox(height: 14),
         if (_lastQuery.isEmpty)
           Expanded(
@@ -1562,7 +1561,7 @@ class _MusicHomeState extends State<MusicHome> {
         else
           Expanded(
             child: _searching
-                ? const Center(child: CircularProgressIndicator(color: _mint))
+                ? ListView(padding: const EdgeInsets.only(top: 12), children: List.generate(6, (_) => const TrackRowSkeleton()))
                 : _searchPlaylistsMode
                     ? _onlinePlaylistResults()
                     : _error != null && _results.isEmpty
@@ -1757,7 +1756,7 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _searchBox({required String hint, required ValueChanged<String> onSubmitted}) {
+  Widget _searchBox({required String hint, required ValueChanged<String> onSubmitted, ValueChanged<String>? onChanged}) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
@@ -1769,6 +1768,7 @@ class _MusicHomeState extends State<MusicHome> {
         controller: _searchController,
         textInputAction: TextInputAction.search,
         onSubmitted: onSubmitted,
+        onChanged: onChanged,
         style: const TextStyle(color: _ink, fontSize: 14, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
           prefixIcon: const Icon(Icons.search_rounded, color: _mint),
@@ -3129,25 +3129,17 @@ class _Atmosphere extends StatelessWidget {
   const _Atmosphere();
 
   @override
-  Widget build(BuildContext context) {
-    return const Positioned.fill(
-      child: IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: <Color>[
-                Color(0xFF121212),
-                Color(0xFF151515),
-                Color(0xFF101010),
-              ],
-            ),
-          ),
+  Widget build(BuildContext context) => Positioned.fill(
+    child: IgnorePointer(
+      child: StreamBuilder<MediaItem?>(
+        stream: fluxAudio.mediaItem,
+        builder: (context, snapshot) => ArtGradientBackground(
+          artUrl: snapshot.data?.artUri?.toString() ?? '',
+          child: const SizedBox.expand(),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {
