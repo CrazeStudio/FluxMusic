@@ -2197,41 +2197,57 @@ class AppSettingsSheet extends StatelessWidget {
                 const SizedBox(height: 20),
                 _sectionLabel('APPEARANCE'),
                 const SizedBox(height: 9),
-                Container(
-                  padding: const EdgeInsets.all(13),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(17),
-                    border: Border.all(color: const Color(0xFF333333)),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF242424),
-                          borderRadius: BorderRadius.circular(13),
+                ListenableBuilder(
+                  listenable: fluxAppearance,
+                  builder: (context, _) => Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(color: const Color(0xFF333333)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Accent colour', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 14,
+                          runSpacing: 12,
+                          children: AppearanceController.accents.entries.map((entry) => InkWell(
+                            onTap: () => fluxAppearance.setAccent(entry.value),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Tooltip(
+                              message: entry.key,
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: entry.value,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: fluxAppearance.accent == entry.value ? Colors.white : Colors.transparent,
+                                    width: 2.5,
+                                  ),
+                                ),
+                                child: fluxAppearance.accent == entry.value
+                                    ? const Icon(Icons.check_rounded, size: 17, color: Colors.black)
+                                    : null,
+                              ),
+                            ),
+                          )).toList(),
                         ),
-                        child: const Icon(Icons.palette_outlined, color: _mint, size: 22),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text('Dark charcoal', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
-                            SizedBox(height: 4),
-                            Text('Orange accent · FluxMusic theme', style: TextStyle(color: _playerMuted, fontSize: 11)),
-                          ],
+                        const Divider(height: 24, color: Color(0xFF333333)),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('AMOLED black', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          subtitle: const Text('Use a true-black app background', style: TextStyle(color: _playerMuted, fontSize: 11)),
+                          value: fluxAppearance.amoled,
+                          onChanged: fluxAppearance.setAmoled,
+                          activeThumbColor: _mint,
                         ),
-                      ),
-                      Container(
-                        width: 23,
-                        height: 23,
-                        decoration: const BoxDecoration(color: _mint, shape: BoxShape.circle),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
