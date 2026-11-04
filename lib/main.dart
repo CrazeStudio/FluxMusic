@@ -16,6 +16,8 @@ import 'models/track.dart';
 import 'services/flux_audio_handler.dart';
 import 'services/autoplay_radio.dart';
 import 'services/listening_stats.dart';
+import 'services/playlist_io.dart';
+import 'screens/collection_page.dart';
 import 'services/music_catalog.dart';
 import 'services/queue_store.dart';
 import 'theme/appearance_controller.dart';
@@ -272,6 +274,8 @@ class _MusicHomeState extends State<MusicHome> {
         'album': track.album,
         'thumbnailUrl': track.thumbnailUrl,
         'durationText': track.durationText,
+    'artistId': track.artistId,
+    'albumId': track.albumId,
       });
 
   Track? _decodeTrack(String raw) {
@@ -284,6 +288,8 @@ class _MusicHomeState extends State<MusicHome> {
         album: value['album'] as String? ?? '',
         thumbnailUrl: value['thumbnailUrl'] as String? ?? '',
         durationText: value['durationText'] as String? ?? '',
+        artistId: value['artistId'] as String? ?? '',
+        albumId: value['albumId'] as String? ?? '',
       );
     } catch (_) {
       return null;
@@ -1098,6 +1104,112 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
+
+  Future<void> _openCollection(Track track, {required bool artist}) async {
+    final id = artist ? track.artistId : track.albumId;
+    if (id.isEmpty) return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => CollectionPage(
+        load: () => artist ? fluxCatalog.artist(id) : fluxCatalog.album(id),
+        onPlay: (items, index, {bool shuffle = false}) async {
+          final playable = List<MediaItem>.of(items);
+          if (shuffle) playable.shuffle(Random());
+          await _requestNotificationPermissionInContext();
+          await fluxAudio.playTracks(playable, startIndex: shuffle ? 0 : index);
+        },
+      ),
+    ));
+  }
+
+  void _showListeningStats() {
+    final artists = fluxStats.topArtists(5);
+    final tracks = fluxStats.topTracks(5);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF121212),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+        child: SingleChildScrollView(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Listening statistics', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text('${fluxStats.totalPlays} track starts recorded on this device', style: const TextStyle(color: _muted)),
+            const SizedBox(height: 20),
+            const Text('Top artists', style: TextStyle(fontWeight: FontWeight.w800)),
+            if (artists.isEmpty) const Text('No artist data yet.', style: TextStyle(color: _muted)),
+            for (final e in artists) ListTile(dense: true, title: Text(e.key), trailing: Text('${e.value} plays')),
+            const SizedBox(height: 12),
+            const Text('Top tracks', style: TextStyle(fontWeight: FontWeight.w800)),
+            if (tracks.isEmpty) const Text('No track data yet.', style: TextStyle(color: _muted)),
+            for (final e in tracks) ListTile(dense: true, title: Text(e.key, maxLines: 1, overflow: TextOverflow.ellipsis), trailing: Text('${e.value}')),
+          ],
+        )),
+      ),
+    );
+  }
+
+  Future<void> _exportPlaylistsToClipboard() async {
+    final data = <String, List<Map<String, dynamic>>>{};
+    for (final entry in _playlists.entries) {
+      data[entry.key] = entry.value.map((t) => <String, dynamic>{
+        'id': t.id, 'title': t.title, 'artist': t.artist, 'album': t.album,
+        'artistId': t.artistId, 'albumId': t.albumId,
+        'thumbnailUrl': t.thumbnailUrl, 'durationText': t.durationText,
+      }).toList();
+    }
+    await Clipboard.setData(ClipboardData(text: PlaylistIO.export(data)));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Playlist backup copied as JSON.')));
+  }
+
+  Future<void> _importPlaylistsFromClipboard() async {
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    final controller = TextEditingController(text: clipboard?.text ?? '');
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import playlists'),
+        content: SizedBox(width: 420, child: TextField(
+          controller: controller, minLines: 5, maxLines: 10,
+          decoration: const InputDecoration(hintText: 'Paste a FluxMusic playlist JSON backup'),
+        )),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('Import')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || raw == null || raw.trim().isEmpty) return;
+    try {
+      final imported = PlaylistIO.import(raw);
+      for (final entry in imported.entries) {
+        final incoming = entry.value.map((m) => Track(
+          id: m['id'] as String? ?? '',
+          title: m['title'] as String? ?? 'Unknown track',
+          artist: m['artist'] as String? ?? 'Unknown artist',
+          album: m['album'] as String? ?? '',
+          artistId: m['artistId'] as String? ?? '',
+          albumId: m['albumId'] as String? ?? '',
+          thumbnailUrl: m['thumbnailUrl'] as String? ?? '',
+          durationText: m['durationText'] as String? ?? '',
+        )).where((t) => t.id.isNotEmpty).toList();
+        final existing = _playlists[entry.key] ?? <Track>[];
+        final ids = existing.map((t) => t.id).toSet();
+        existing.addAll(incoming.where((t) => ids.add(t.id)));
+        _playlists[entry.key] = existing;
+      }
+      await _savePlaylists();
+      if (mounted) setState(() {});
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Imported ${imported.length} playlist(s).')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid FluxMusic playlist JSON.')));
+    }
+  }
+
   void _openSettings() {
     showModalBottomSheet<void>(
       context: context,
@@ -1116,6 +1228,11 @@ class _MusicHomeState extends State<MusicHome> {
           Navigator.of(sheetContext).pop();
           _editPersonalization();
         },
+        onStats: _showListeningStats,
+        onExport: _exportPlaylistsToClipboard,
+        onImport: _importPlaylistsFromClipboard,
+        radioEnabled: fluxRadio.enabled,
+        onRadioChanged: (value) { fluxRadio.enabled = value; },
       ),
     );
   }
@@ -1826,6 +1943,8 @@ class _MusicHomeState extends State<MusicHome> {
                   unawaited(_addTrackToPlaylist(track));
                   return;
                 }
+                if (action == 'artist') { unawaited(_openCollection(track, artist: true)); return; }
+                if (action == 'album') { unawaited(_openCollection(track, artist: false)); return; }
                 final item = track.toMediaItem();
                 if (action == 'next') {
                   fluxAudio.playNext(item);
@@ -1840,8 +1959,10 @@ class _MusicHomeState extends State<MusicHome> {
                   ),
                 );
               },
-              itemBuilder: (_) => const <PopupMenuEntry<String>>[
-                PopupMenuItem<String>(
+              itemBuilder: (_) => <PopupMenuEntry<String>>[
+                if (track.artistId.isNotEmpty) const PopupMenuItem<String>(value: 'artist', child: Row(children: [Icon(Icons.person_outline_rounded, size: 18), SizedBox(width: 10), Text('Open artist')])),
+                if (track.albumId.isNotEmpty) const PopupMenuItem<String>(value: 'album', child: Row(children: [Icon(Icons.album_outlined, size: 18), SizedBox(width: 10), Text('Open album')])),
+                const PopupMenuItem<String>(
                   value: 'next',
                   child: Row(children: <Widget>[
                     Icon(Icons.play_arrow_rounded, size: 18),
@@ -1988,11 +2109,21 @@ class AppSettingsSheet extends StatelessWidget {
     required this.languageSummary,
     required this.onOpenAudio,
     required this.onEditCatalogue,
+    required this.onStats,
+    required this.onExport,
+    required this.onImport,
+    required this.radioEnabled,
+    required this.onRadioChanged,
   });
 
   final String languageSummary;
   final VoidCallback onOpenAudio;
   final VoidCallback onEditCatalogue;
+  final VoidCallback onStats;
+  final VoidCallback onExport;
+  final VoidCallback onImport;
+  final bool radioEnabled;
+  final ValueChanged<bool> onRadioChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -2042,6 +2173,20 @@ class AppSettingsSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 _sectionLabel('YOUR MUSIC'),
+                const SizedBox(height: 9),
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  title: const Text('Autoplay radio', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  subtitle: const Text('Add related tracks when the queue is nearly finished', style: TextStyle(color: _playerMuted, fontSize: 11)),
+                  value: radioEnabled,
+                  onChanged: onRadioChanged,
+                  activeThumbColor: _mint,
+                ),
+                _row(icon: Icons.insights_rounded, title: 'Listening statistics', subtitle: 'Your most-played artists and tracks · stored locally', onTap: onStats),
+                const SizedBox(height: 8),
+                _row(icon: Icons.file_upload_outlined, title: 'Export playlists', subtitle: 'Copy a portable JSON backup to clipboard', onTap: onExport),
+                const SizedBox(height: 8),
+                _row(icon: Icons.file_download_outlined, title: 'Import playlists', subtitle: 'Paste a FluxMusic JSON backup', onTap: onImport),
                 const SizedBox(height: 9),
                 _row(
                   icon: Icons.language_rounded,
