@@ -67,6 +67,9 @@ class MusicCatalog {
     if (id == null || id.isEmpty) return null;
     final title = _str(() => s.name) ?? _str(() => s.title) ?? 'Unknown track';
     final artist = _str(() => s.artist.name) ?? _artists(s) ?? fallbackArtist;
+    final artistId = _str(() => s.artist.browseId) ?? _str(() => s.artist.id) ??
+        _str(() => (s.artists as Iterable).first.browseId) ?? '';
+    final albumId = _str(() => s.album.browseId) ?? _str(() => s.album.id) ?? '';
     final seconds = _try<num>(() => s.duration as num?);
     final art = _thumb(s) ?? fallbackArt ?? '';
     return MediaItem(
@@ -76,7 +79,7 @@ class MusicCatalog {
       album: _str(() => s.album.name) ?? fallbackAlbum,
       duration: seconds != null ? Duration(seconds: seconds.toInt()) : null,
       artUri: art.isEmpty ? null : Uri.tryParse(art),
-      extras: <String, dynamic>{'videoId': id, 'thumbnailUrl': art},
+      extras: <String, dynamic>{'videoId': id, 'thumbnailUrl': art, 'artistId': artistId, 'albumId': albumId},
     );
   }
 
