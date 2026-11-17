@@ -111,14 +111,15 @@ class MusicViewModel(
         val requestId = ++discoveryGeneration
         discoveryJob = viewModelScope.launch {
             _discoveryState.update { it.copy(selectedLanguage = language, isLoading = true, error = null) }
-            if (preferences.value.offlineCacheMode) {
-                val local = repository.searchLocalCache(if (language == "All") "" else language)
-                if (requestId != discoveryGeneration) return@launch
-                _discoveryState.update {
-                    it.copy(isLoading = false, tracks = local, error = null)
-                }
-                return@launch
+
+            // Render saved tracks immediately; refresh discovery without blanking the Home screen.
+            val local = repository.searchLocalCache(if (language == "All") "" else language)
+            if (requestId != discoveryGeneration) return@launch
+            val offlineOnly = preferences.value.offlineCacheMode
+            _discoveryState.update {
+                it.copy(isLoading = !offlineOnly, tracks = local, error = null)
             }
+            if (offlineOnly) return@launch
 
             val result = repository.discoverByLanguage(language)
             if (requestId != discoveryGeneration) return@launch
@@ -154,7 +155,12 @@ class MusicViewModel(
             if (!immediate) delay(260L)
             if (requestId != searchGeneration) return@launch
 
-            _searchState.update { it.copy(isSearching = true, error = null) }
+            // Show saved matches immediately while the online catalogue refreshes.
+            val localResults = repository.searchLocalCache(trimmed)
+            if (requestId != searchGeneration) return@launch
+            _searchState.update {
+                it.copy(isSearching = true, results = localResults, error = null)
+            }
             val result = repository.searchOnlineAndCache(trimmed)
             if (requestId != searchGeneration) return@launch
 
