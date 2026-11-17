@@ -26,9 +26,15 @@ public final class YtMusicCatalog {
         "https://music.youtube.com/youtubei/v1/search?prettyPrint=false";
     private static final String CLIENT_VERSION = "1.20261116.01.00";
     private static volatile boolean extractorReady;
+    private static final long CACHE_TTL_MS=600000L;
+    private static final LinkedHashMap<String,CacheEntry> SEARCH_CACHE=new LinkedHashMap<String,CacheEntry>(32,0.75f,true);
+    private static final class CacheEntry { final long time=System.currentTimeMillis(); final List<Track> tracks; CacheEntry(List<Track> t){tracks=new ArrayList<>(t);} }
     private YtMusicCatalog() {}
 
     public static List<Track> search(String query) throws Exception {
+        String normalized=query==null?"":query.trim().replaceAll("\\s+"," ").toLowerCase(Locale.ROOT);
+        if(normalized.isEmpty())return Collections.emptyList();
+        synchronized(SEARCH_CACHE){CacheEntry e=SEARCH_CACHE.get(normalized);if(e!=null&&System.currentTimeMillis()-e.time<CACHE_TTL_MS)return new ArrayList<>(e.tracks);if(e!=null)SEARCH_CACHE.remove(normalized);}
         JSONObject client = new JSONObject()
             .put("clientName", "WEB_REMIX")
             .put("clientVersion", CLIENT_VERSION)
@@ -39,8 +45,8 @@ public final class YtMusicCatalog {
             .put("query", query);
         HttpURLConnection c = (HttpURLConnection) new URL(SEARCH_ENDPOINT).openConnection();
         c.setRequestMethod("POST");
-        c.setConnectTimeout(15000);
-        c.setReadTimeout(20000);
+        c.setConnectTimeout(7000);
+        c.setReadTimeout(10000);
         c.setRequestProperty("User-Agent", USER_AGENT);
         c.setRequestProperty("Content-Type", "application/json");
         c.setRequestProperty("Origin", "https://music.youtube.com");
@@ -58,7 +64,9 @@ public final class YtMusicCatalog {
             throw new IOException("YouTube Music search HTTP " + status);
         LinkedHashMap<String, Track> tracks = new LinkedHashMap<>();
         collect(new JSONObject(json), tracks);
-        return new ArrayList<>(tracks.values());
+        List<Track> result=new ArrayList<>(tracks.values());
+        synchronized(SEARCH_CACHE){SEARCH_CACHE.put(normalized,new CacheEntry(result));while(SEARCH_CACHE.size()>80)SEARCH_CACHE.remove(SEARCH_CACHE.keySet().iterator().next());}
+        return result;
     }
 
     private static void collect(Object node, Map<String, Track> out) {
