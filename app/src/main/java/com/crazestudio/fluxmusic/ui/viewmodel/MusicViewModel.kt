@@ -90,8 +90,11 @@ class MusicViewModel(
     private val _lyricsState = MutableStateFlow(LyricsUiState())
     val lyricsState: StateFlow<LyricsUiState> = _lyricsState.asStateFlow()
 
+    private var discoveryJob: Job? = null
     private var searchJob: Job? = null
     private var lyricsJob: Job? = null
+    private var discoveryGeneration = 0L
+    private var searchGeneration = 0L
 
     init {
         playback.connect()
@@ -104,25 +107,34 @@ class MusicViewModel(
     }
 
     fun loadDiscovery(language: String = _discoveryState.value.selectedLanguage) {
-        viewModelScope.launch {
+        discoveryJob?.cancel()
+        val requestId = ++discoveryGeneration
+        discoveryJob = viewModelScope.launch {
             _discoveryState.update { it.copy(selectedLanguage = language, isLoading = true, error = null) }
             if (preferences.value.offlineCacheMode) {
                 val local = repository.searchLocalCache(if (language == "All") "" else language)
+                if (requestId != discoveryGeneration) return@launch
                 _discoveryState.update {
                     it.copy(isLoading = false, tracks = local, error = null)
                 }
                 return@launch
             }
+
             val result = repository.discoverByLanguage(language)
-            result.onSuccess { list ->
-                _discoveryState.update { it.copy(isLoading = false, tracks = list, error = null) }
-            }.onFailure { err ->
+            if (requestId != discoveryGeneration) return@launch
+            if (result.isSuccess) {
+                _discoveryState.update {
+                    it.copy(isLoading = false, tracks = result.getOrDefault(emptyList()), error = null)
+                }
+            } else {
                 val fallback = repository.searchLocalCache(if (language == "All") "" else language)
+                if (requestId != discoveryGeneration) return@launch
+                val message = result.exceptionOrNull()?.message ?: "YouTube Music is unavailable."
                 _discoveryState.update {
                     it.copy(
                         isLoading = false,
                         tracks = fallback,
-                        error = if (fallback.isEmpty()) err.message ?: "YouTube Music is unavailable." else null
+                        error = if (fallback.isEmpty()) message else null
                     )
                 }
             }
@@ -132,24 +144,36 @@ class MusicViewModel(
     fun updateSearchQuery(newQuery: String, immediate: Boolean = false) {
         _searchState.update { it.copy(query = newQuery) }
         searchJob?.cancel()
+        val requestId = ++searchGeneration
         val trimmed = newQuery.trim()
         if (trimmed.length < 2) {
             _searchState.update { it.copy(isSearching = false, results = emptyList(), error = null) }
             return
         }
         searchJob = viewModelScope.launch {
-            if (!immediate) delay(360L)
+            if (!immediate) delay(260L)
+            if (requestId != searchGeneration) return@launch
+
             _searchState.update { it.copy(isSearching = true, error = null) }
             val result = repository.searchOnlineAndCache(trimmed)
-            result.onSuccess { list ->
-                _searchState.update { it.copy(isSearching = false, results = list, error = null) }
-            }.onFailure { err ->
+            if (requestId != searchGeneration) return@launch
+
+            if (result.isSuccess) {
+                val tracks = result.getOrDefault(emptyList())
+                _searchState.update {
+                    if (requestId == searchGeneration) {
+                        it.copy(isSearching = false, results = tracks, error = null)
+                    } else it
+                }
+            } else {
                 val localFallback = repository.searchLocalCache(trimmed)
+                if (requestId != searchGeneration) return@launch
+                val message = result.exceptionOrNull()?.message ?: "Search unavailable."
                 _searchState.update {
                     it.copy(
                         isSearching = false,
                         results = localFallback,
-                        error = if (localFallback.isEmpty()) err.message ?: "Search unavailable." else null
+                        error = if (localFallback.isEmpty()) message else null
                     )
                 }
             }
