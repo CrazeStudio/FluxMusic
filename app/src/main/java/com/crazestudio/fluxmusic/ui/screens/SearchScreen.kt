@@ -253,9 +253,11 @@ fun SearchScreen(
                             isPlayingThis = track.id == activeTrackId,
                             isFavorite = track.id in favoriteIds,
                             onClick = {
+                                // Hand off the selected result before refreshing search state.
+                                val selectedResults = searchState.results
+                                onPlayTracks(selectedResults, index, "Search · $trimmed")
                                 onSubmitSearch(trimmed)
-                                onPlayTracks(searchState.results, index, "Search · $trimmed")
-                            },
+                                },
                             onToggleFavorite = { onToggleFavorite(track) },
                             onPlayNext = { onPlayNext(track) },
                             onAddToQueue = { onAddToQueue(track) },
@@ -315,9 +317,11 @@ fun SearchScreen(
                         isPlayingThis = track.id == activeTrackId,
                         isFavorite = track.id in favoriteIds,
                         onClick = {
+                            // Hand off the selected result before refreshing search state.
+                            val selectedResults = searchState.results
+                            onPlayTracks(selectedResults, index, "Search · $trimmed")
                             onSubmitSearch(trimmed)
-                            onPlayTracks(searchState.results, index, "Search · $trimmed")
-                        },
+                            },
                         onToggleFavorite = { onToggleFavorite(track) },
                         onPlayNext = { onPlayNext(track) },
                         onAddToQueue = { onAddToQueue(track) },
