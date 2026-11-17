@@ -36,8 +36,11 @@ public final class MainActivity extends AppCompatActivity implements Player.List
     static final int BG=0xFFFAF8F5, SURFACE=0xFFFFFFFF, ALT=0xFFF0ECE7, INK=0xFF151515, MUTED=0xFF77716B, LINE=0xFFE8E2DC, DARK=0xFF252525;
     final List<Track> tracks=new ArrayList<>();
     final Handler handler=new Handler(Looper.getMainLooper());
-    final ExecutorService musicExecutor=Executors.newSingleThreadExecutor();
+    final ExecutorService musicExecutor=Executors.newFixedThreadPool(2);
+    final ExecutorService playbackExecutor=Executors.newSingleThreadExecutor();
     int searchGeneration=0;
+    boolean discoveryLoading=false, discoveryLoaded=false;
+    Runnable pendingSearch;
     MusicStore store;
     MediaController player;
     ListenableFuture<MediaController> controllerFuture;
@@ -82,8 +85,25 @@ public final class MainActivity extends AppCompatActivity implements Player.List
     boolean hasAudio(){String p=Build.VERSION.SDK_INT>=33?Manifest.permission.READ_MEDIA_AUDIO:Manifest.permission.READ_EXTERNAL_STORAGE;return ContextCompat.checkSelfPermission(this,p)==PackageManager.PERMISSION_GRANTED;}
     void requestAudio(){List<String> p=new ArrayList<>();p.add(Build.VERSION.SDK_INT>=33?Manifest.permission.READ_MEDIA_AUDIO:Manifest.permission.READ_EXTERNAL_STORAGE);if(Build.VERSION.SDK_INT>=33&&ContextCompat.checkSelfPermission(this,Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)p.add(Manifest.permission.POST_NOTIFICATIONS);requestPermissions(p.toArray(new String[0]),41);}
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(r==41){if(hasAudio())scan();else{render();Toast.makeText(this,"Allow audio access to scan your device.",Toast.LENGTH_LONG).show();}}}
-    void scan(){loadDiscovery();}
-    void loadDiscovery(){int generation=++searchGeneration;musicExecutor.execute(()->{try{List<Track> found=YtMusicCatalog.search("popular Hindi songs");runOnUiThread(()->{if(generation==searchGeneration){tracks.clear();tracks.addAll(found);if(screen.equals("home"))render();}});}catch(Exception e){runOnUiThread(()->{if(screen.equals("home"))Toast.makeText(this,"YouTube Music catalogue is temporarily unavailable.",Toast.LENGTH_LONG).show();});}});}
+    void scan(){discoveryLoaded=false;loadDiscovery();}
+    void loadDiscovery(){
+        if(discoveryLoading||discoveryLoaded)return;
+        discoveryLoading=true;
+        musicExecutor.execute(()->{
+            try{
+                List<Track> found=YtMusicCatalog.search("popular Hindi songs");
+                runOnUiThread(()->{mergeTracks(found);discoveryLoaded=true;discoveryLoading=false;if(screen.equals("home"))render();});
+            }catch(Exception e){
+                runOnUiThread(()->{discoveryLoading=false;if(screen.equals("home")){render();Toast.makeText(this,"YouTube Music is unavailable. Check your connection and retry.",Toast.LENGTH_LONG).show();}});
+            }
+        });
+    }
+    void mergeTracks(List<Track> found){
+        LinkedHashMap<String,Track> merged=new LinkedHashMap<>();
+        for(Track t:tracks)merged.put(t.id,t);
+        for(Track t:found)merged.put(t.id,t);
+        tracks.clear();tracks.addAll(merged.values());
+    }
     MediaItem current(){return player==null?null:player.getCurrentMediaItem();}
     Track active(){MediaItem m=current();if(m!=null){for(Track t:tracks)if(t.id.equals(m.mediaId))return t;}return active;}
     void render(){
@@ -119,15 +139,44 @@ public final class MainActivity extends AppCompatActivity implements Player.List
         searchResults(results,query);return scroll(p);
     }
     void searchResults(LinearLayout target,String text){
-        target.removeAllViews();String q=text.trim().toLowerCase(Locale.ROOT);
+        if(pendingSearch!=null)handler.removeCallbacks(pendingSearch);
+        int generation=++searchGeneration;
+        target.removeAllViews();
+        String q=text.trim();
         if(q.isEmpty()){
             header(target,"Recent Searches","Clear",()->{store.clearSearches();searchResults(target,"");});
-            for(String s:store.getSearches()){TextView r=txt("◷   "+s,14,false,INK);r.setPadding(0,d(10),0,d(10));target.addView(r);r.setOnClickListener(v->{query=s;render();});}
-            header(target,"Explore by Language","",null);target.addView(languageChips());header(target,"Popular Right Now","View all",()->go("library"));
-            if(tracks.isEmpty())target.addView(empty("Popular on YouTube Music","Loading recommendations…"));else rows(target,tracks,8);
-        }else{
-            header(target,"YouTube Music results","Songs",null);target.addView(empty("Searching YouTube Music…","Finding songs, artists and albums"));int generation=++searchGeneration;musicExecutor.execute(()->{try{List<Track> found=YtMusicCatalog.search(text);runOnUiThread(()->{if(generation!=searchGeneration||!screen.equals("search"))return;target.removeAllViews();header(target,"YouTube Music results",found.size()+" songs",null);if(found.isEmpty())target.addView(empty("No matches found","Try another search or spelling."));else{tracks.clear();tracks.addAll(found);rows(target,found,found.size());}});}catch(Exception e){runOnUiThread(()->{if(generation!=searchGeneration||!screen.equals("search"))return;target.removeAllViews();header(target,"YouTube Music results","",null);target.addView(empty("Search unavailable",e.getMessage()==null?"YouTube Music could not be reached.":e.getMessage()));});}});
+            for(String recent:store.getSearches()){
+                TextView r=txt("◷   "+recent,14,false,INK);r.setPadding(0,d(10),0,d(10));target.addView(r);
+                r.setOnClickListener(v->{query=recent;render();});
+            }
+            header(target,"Explore by Language","",null);target.addView(languageChips());
+            header(target,"Popular Right Now","View all",()->go("library"));
+            if(tracks.isEmpty())target.addView(empty("Popular on YouTube Music","Loading recommendations…"));
+            else rows(target,tracks,8);
+            return;
         }
+        header(target,"YouTube Music results","",null);
+        if(q.length()<2){target.addView(empty("Keep typing","Enter at least 2 characters to search."));return;}
+        target.addView(empty("Searching…","Results appear as soon as YouTube Music responds."));
+        pendingSearch=()->musicExecutor.execute(()->{
+            try{
+                List<Track> found=YtMusicCatalog.search(q);
+                runOnUiThread(()->{
+                    if(generation!=searchGeneration||!screen.equals("search"))return;
+                    mergeTracks(found);target.removeAllViews();
+                    header(target,"YouTube Music results",found.size()+" songs",null);
+                    if(found.isEmpty())target.addView(empty("No matches found","Try another search or spelling."));
+                    else rows(target,found,found.size());
+                });
+            }catch(Exception e){
+                runOnUiThread(()->{
+                    if(generation!=searchGeneration||!screen.equals("search"))return;
+                    target.removeAllViews();header(target,"YouTube Music results","",null);
+                    target.addView(empty("Search unavailable","YouTube Music could not be reached. Tap search to retry."));
+                });
+            }
+        });
+        handler.postDelayed(pendingSearch,420);
     }
     View libraryPage(){LinearLayout p=col();p.addView(txt("Your Library",28,true,INK));space(p,8);p.addView(txt("Your saved music and playlists",14,false,MUTED));space(p,14);TextView liked=txt("♥   Liked Songs    "+store.getFavoriteIds().size(),16,true,INK);liked.setPadding(d(15),d(17),d(15),d(17));liked.setBackground(box(SURFACE,16,LINE));p.addView(liked);liked.setOnClickListener(v->{playlist="Liked Songs";screen="detail";render();});header(p,"Your music",tracks.size()+" tracks",null);if(tracks.isEmpty())p.addView(empty("Your library is ready","Your liked songs and playlists will appear here."));else rows(p,tracks,tracks.size());return scroll(p);}
     View playlistsPage(){LinearLayout p=col();LinearLayout h=new LinearLayout(this);h.setGravity(Gravity.CENTER_VERTICAL);h.addView(txt("Playlists",28,true,INK),new LinearLayout.LayoutParams(0,-2,1));TextView create=pill("+ Create");h.addView(create);create.setOnClickListener(v->createPlaylist(null));p.addView(h);space(p,12);TextView liked=txt("♥   Liked Songs\n      "+store.getFavoriteIds().size()+" songs",16,true,INK);liked.setPadding(d(16),d(16),d(16),d(16));liked.setBackground(box(SURFACE,16,LINE));p.addView(liked);liked.setOnClickListener(v->{playlist="Liked Songs";screen="detail";render();});header(p,"Your collections","",null);List<String> names=store.getPlaylists();if(names.isEmpty())p.addView(empty("Make it yours","Create a playlist and add songs from the ⋮ menu."));for(String n:names){TextView r=txt("♫   "+n+"\n      "+store.getPlaylistTrackIds(n).size()+" songs",15,true,INK);r.setPadding(d(14),d(14),d(14),d(14));r.setBackground(box(SURFACE,14,LINE));LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(-1,-2);q.bottomMargin=d(9);p.addView(r,q);r.setOnClickListener(v->{playlist=n;screen="detail";render();});}return scroll(p);}
@@ -164,7 +213,7 @@ public final class MainActivity extends AppCompatActivity implements Player.List
     @Override public void onMediaItemTransition(MediaItem item,int reason){if(item!=null)for(Track t:tracks)if(t.id.equals(item.mediaId)){active=t;store.addRecent(t.id);break;}syncMini();if(screen.equals("player"))render();}
     @Override public void onIsPlayingChanged(boolean playing){syncMini();}
     @Override public void onPlaybackStateChanged(int state){syncMini();}
-    @Override protected void onResume(){super.onResume();if(tracks.isEmpty())loadDiscovery();}
-    @Override protected void onDestroy(){handler.removeCallbacks(ticker);if(controllerFuture!=null)MediaController.releaseFuture(controllerFuture);musicExecutor.shutdownNow();super.onDestroy();}
+    @Override protected void onResume(){super.onResume();if(tracks.isEmpty()&&!discoveryLoading)loadDiscovery();}
+    @Override protected void onDestroy(){handler.removeCallbacks(ticker);if(controllerFuture!=null)MediaController.releaseFuture(controllerFuture);musicExecutor.shutdownNow();playbackExecutor.shutdownNow();super.onDestroy();}
     @Override public void onBackPressed(){if(screen.equals("player"))screen=previousTab;else if(screen.equals("detail"))screen="playlists";else if(!screen.equals("home"))screen="home";else{super.onBackPressed();return;}tab=screen.equals("detail")?"playlists":screen;render();}
 }
