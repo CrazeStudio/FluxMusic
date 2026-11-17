@@ -2,6 +2,7 @@ package com.crazestudio.fluxmusic.data.remote
 
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import com.crazestudio.fluxmusic.data.model.Track
+import android.net.Uri
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -22,6 +23,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 data class ResolvedAudioStream(
     val url: String,
@@ -77,6 +79,26 @@ object YtMusicCatalog {
     private var persistentInvalidator: ((videoId: String) -> Unit)? = null
 
     private val prefetchExecutor: ExecutorService = Executors.newFixedThreadPool(2)
+    private val playbackRequestNumber = AtomicLong(1L)
+
+    /**
+     * YouTube video playback endpoints require a request-number parameter on each
+     * videoplayback request. NewPipe's own YoutubeHttpDataSource adds this parameter.
+     */
+    fun prepareYoutubePlaybackUrl(url: String): String {
+        return runCatching {
+            val uri = Uri.parse(url)
+            if (!uri.path.orEmpty().startsWith("/videoplayback") ||
+                uri.getQueryParameter("rn") != null
+            ) {
+                return url
+            }
+            uri.buildUpon()
+                .appendQueryParameter("rn", playbackRequestNumber.getAndIncrement().toString())
+                .build()
+                .toString()
+        }.getOrDefault(url)
+    }
     private val inFlightResolutions = ConcurrentHashMap<String, CompletableFuture<ResolvedAudioStream>>()
 
     private data class SearchCacheEntry(
@@ -313,7 +335,7 @@ object YtMusicCatalog {
             val ordered = orderNewPipeCandidates(playableAudio, quality)
             for (candidate in ordered.take(4)) {
                 val url = candidate.content ?: continue
-                if (probeStreamPlayable(url, VISIONOS_USER_AGENT)) {
+                if (probeStreamPlayable(url, VISIONOS_USER_AGENT, useYoutubePlaybackProtocol = true)) {
                     return ResolvedAudioStream(
                         url = url,
                         userAgent = VISIONOS_USER_AGENT,
@@ -412,27 +434,54 @@ object YtMusicCatalog {
         return null
     }
 
-    private fun probeStreamPlayable(urlString: String, userAgent: String): Boolean {
-        return runCatching {
-            val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
+    private fun probeStreamPlayable(
+        urlString: String,
+        userAgent: String,
+        useYoutubePlaybackProtocol: Boolean = false
+    ): Boolean {
+        return try {
+            val requestUrl = if (useYoutubePlaybackProtocol) {
+                prepareYoutubePlaybackUrl(urlString)
+            } else {
+                urlString
+            }
+            val conn = (URL(requestUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = if (useYoutubePlaybackProtocol) "POST" else "GET"
                 instanceFollowRedirects = true
-                connectTimeout = 3500
-                readTimeout = 3500
+                connectTimeout = 5000
+                readTimeout = 5000
                 setRequestProperty("User-Agent", userAgent)
+                setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("Range", "bytes=0-1")
+                if (useYoutubePlaybackProtocol) {
+                    // Required by YouTube's videoplayback endpoint; a plain GET can be rejected.
+                    setRequestProperty("TE", "trailers")
+                    doOutput = true
+                }
             }
             try {
+                if (useYoutubePlaybackProtocol) {
+                    conn.outputStream.use { it.write(byteArrayOf(0x78, 0x00)) }
+                }
                 val code = conn.responseCode
                 val contentType = conn.contentType.orEmpty()
-                if (code !in 200..299) return false
-                if (contentType.startsWith("text/html", ignoreCase = true)) return false
+                if (code !in 200..299) {
+                    Log.w("FluxMusicPlayback", "Stream probe rejected candidate: HTTP $code")
+                    return false
+                }
+                if (contentType.startsWith("text/html", ignoreCase = true)) {
+                    Log.w("FluxMusicPlayback", "Stream probe returned HTML instead of audio")
+                    return false
+                }
                 conn.inputStream?.use { input -> input.read() }
                 true
             } finally {
                 conn.disconnect()
             }
-        }.getOrDefault(false)
+        } catch (e: Exception) {
+            Log.w("FluxMusicPlayback", "Stream probe failed: ${e.message}", e)
+            false
+        }
     }
 
     fun clearStreamCache() {
