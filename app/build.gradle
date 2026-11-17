@@ -1,28 +1,14 @@
-plugins {
-    id 'com.android.application'
-}
-
+plugins { id 'com.android.application' }
 android {
     namespace 'com.crazestudio.fluxmusic'
     compileSdk 36
-
-    defaultConfig {
-        applicationId 'com.crazestudio.fluxmusic'
-        minSdk 23
-        targetSdk 36
-        versionCode 1
-        versionName '1.0.0'
-    }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
+    defaultConfig { applicationId 'com.crazestudio.fluxmusic'; minSdk 23; targetSdk 36; versionCode 2; versionName '2.0.0' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
-
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'androidx.core:core:1.17.0'
     implementation 'androidx.media3:media3-exoplayer:1.11.1'
     implementation 'androidx.media3:media3-session:1.11.1'
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.27.1'
 }
