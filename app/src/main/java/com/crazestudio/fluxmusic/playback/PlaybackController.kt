@@ -80,7 +80,11 @@ class PlaybackController(
                     playQueue(tracks, idx, label)
                 }
             } catch (e: Exception) {
-                _state.update { it.copy(playbackError = "Could not connect to playback service.") }
+                controllerFuture = null
+                controller = null
+                _state.update {
+                    it.copy(isConnected = false, playbackError = "Could not connect to playback service.")
+                }
             }
         }, ContextCompat.getMainExecutor(appContext))
     }
@@ -96,7 +100,7 @@ class PlaybackController(
                         _state.update { it.copy(positionMs = pos, durationMs = dur) }
                     }
                 }
-                delay(250L)
+                delay(500L)
             }
         }
     }
@@ -156,11 +160,11 @@ class PlaybackController(
     }
 
     fun retryCurrent() {
-        val c = controller ?: return
+        if (controller == null) return
         _state.update { it.copy(playbackError = null, isBuffering = true) }
+        // MusicService owns stream-cache invalidation and the single retry.
+        // Calling prepare() here as well used to race the service and cancel its reload.
         sendCustomCommand(MusicService.CMD_RETRY_FRESH, Bundle.EMPTY)
-        c.prepare()
-        c.play()
     }
 
     fun playNext(track: Track) {
@@ -320,10 +324,16 @@ class PlaybackController(
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         syncFromPlayer()
+        if (isPlaying) {
+            _state.update { it.copy(playbackError = null, isBuffering = false) }
+        }
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         syncFromPlayer()
+        if (playbackState == Player.STATE_READY) {
+            _state.update { it.copy(playbackError = null, isBuffering = false) }
+        }
     }
 
     override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
