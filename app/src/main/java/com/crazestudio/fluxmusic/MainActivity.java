@@ -203,10 +203,55 @@ public final class MainActivity extends AppCompatActivity implements Player.List
     List<Track> recent(){List<Track> r=tracksFor(store.getRecentIds());return r.isEmpty()?new ArrayList<>(tracks.subList(0,Math.min(8,tracks.size()))):r;}
     List<Track> tracksFor(List<String> ids){List<Track> r=new ArrayList<>();for(String id:ids)for(Track t:tracks)if(t.id.equals(id)){r.add(t);break;}return r;}
     void searchFor(String s){query=s;go("search");}
-    void playList(List<Track> list,int index){if(list.isEmpty())return;if(player==null){Toast.makeText(this,"Connecting to playback…",0).show();return;}int start=Math.max(0,Math.min(index,list.size()-1));Toast.makeText(this,"Preparing YouTube Music queue…",Toast.LENGTH_SHORT).show();musicExecutor.execute(()->{try{List<MediaItem> items=new ArrayList<>();for(int n=start;n<list.size();n++){Track t=list.get(n);String stream=YtMusicCatalog.resolveAudioUrl(t.id);items.add(t.toMediaItem(Uri.parse(stream)));}for(int n=0;n<start;n++){Track t=list.get(n);String stream=YtMusicCatalog.resolveAudioUrl(t.id);items.add(t.toMediaItem(Uri.parse(stream)));}runOnUiThread(()->{if(player==null)return;player.setMediaItems(items,0,C.TIME_UNSET);player.prepare();player.play();active=list.get(start);store.addRecent(active.id);previousTab=tab;screen="player";render();});}catch(Exception e){runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Could not start playback").setMessage(e.getMessage()==null?"YouTube Music could not provide an audio stream.":e.getMessage()).setPositiveButton("Retry",(d,w)->playList(list,start)).setNegativeButton("Close",null).show());}});}
+    void playList(List<Track> list,int index){
+        if(list.isEmpty())return;
+        if(player==null){Toast.makeText(this,"Connecting to playback…",0).show();return;}
+        int start=Math.max(0,Math.min(index,list.size()-1));
+        Track selected=list.get(start);
+        Toast.makeText(this,"Preparing "+selected.title+"…",Toast.LENGTH_SHORT).show();
+        playbackExecutor.execute(()->{
+            try{
+                String stream=YtMusicCatalog.resolveAudioUrl(selected.id);
+                MediaItem first=selected.toMediaItem(Uri.parse(stream));
+                runOnUiThread(()->{
+                    if(player==null)return;
+                    player.setMediaItem(first);player.prepare();player.play();
+                    active=selected;store.addRecent(selected.id);previousTab=tab;screen="player";render();
+                });
+                for(int offset=1;offset<list.size();offset++){
+                    Track next=list.get((start+offset)%list.size());
+                    try{
+                        String nextUrl=YtMusicCatalog.resolveAudioUrl(next.id);
+                        MediaItem item=next.toMediaItem(Uri.parse(nextUrl));
+                        runOnUiThread(()->{if(player!=null)player.addMediaItem(item);});
+                    }catch(Exception ignored){}
+                }
+            }catch(Exception e){
+                runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Could not start playback")
+                    .setMessage(e.getMessage()==null?"The provider did not return a playable audio stream.":e.getMessage())
+                    .setPositiveButton("Retry",(d,w)->playList(list,start)).setNegativeButton("Close",null).show());
+            }
+        });
+    }
+    void addResolvedToQueue(Track track,boolean playNext){
+        if(player==null){Toast.makeText(this,"Open a song first to create a queue.",0).show();return;}
+        playbackExecutor.execute(()->{
+            try{
+                String url=YtMusicCatalog.resolveAudioUrl(track.id);
+                MediaItem item=track.toMediaItem(Uri.parse(url));
+                runOnUiThread(()->{
+                    if(player!=null){
+                        if(playNext)player.addMediaItem(Math.min(player.getCurrentMediaItemIndex()+1,player.getMediaItemCount()),item);
+                        else player.addMediaItem(item);
+                        Toast.makeText(this,"Added to queue",Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Could not prepare this track for the queue.",Toast.LENGTH_LONG).show());}
+        });
+    }
     void toggle(){if(player==null)return;if(player.isPlaying())player.pause();else player.play();syncMini();}
     void syncMini(){if(mini==null)return;Track t=active();if(t==null){mini.setVisibility(View.GONE);return;}mini.setVisibility(screen.equals("player")?View.GONE:View.VISIBLE);miniName.setText(t.title);miniArtist.setText(t.artist);miniToggle.setText(player!=null&&player.isPlaying()?"Ⅱ":"▶");if(playToggle!=null)playToggle.setText(player!=null&&player.isPlaying()?"Ⅱ":"▶");}
-    void trackMenu(View anchor,Track t){PopupMenu m=new PopupMenu(this,anchor);m.getMenu().add("Play next");m.getMenu().add("Add to queue");m.getMenu().add("Add to playlist");m.getMenu().add(store.isFavorite(t.id)?"Remove from Liked Songs":"Add to Liked Songs");m.setOnMenuItemClickListener(item->{String s=item.getTitle().toString();if(s.equals("Play next")){if(player!=null)player.addMediaItem(0,t.toMediaItem());}else if(s.equals("Add to queue")){if(player!=null)player.addMediaItem(t.toMediaItem());}else if(s.equals("Add to playlist"))choosePlaylist(t);else{store.toggleFavorite(t.id);Toast.makeText(this,store.isFavorite(t.id)?"Added to Liked Songs":"Removed from Liked Songs",0).show();}return true;});m.show();}
+    void trackMenu(View anchor,Track t){PopupMenu m=new PopupMenu(this,anchor);m.getMenu().add("Play next");m.getMenu().add("Add to queue");m.getMenu().add("Add to playlist");m.getMenu().add(store.isFavorite(t.id)?"Remove from Liked Songs":"Add to Liked Songs");m.setOnMenuItemClickListener(item->{String s=item.getTitle().toString();if(s.equals("Play next")){addResolvedToQueue(t,true);}else if(s.equals("Add to queue")){addResolvedToQueue(t,false);}else if(s.equals("Add to playlist"))choosePlaylist(t);else{store.toggleFavorite(t.id);Toast.makeText(this,store.isFavorite(t.id)?"Added to Liked Songs":"Removed from Liked Songs",0).show();}return true;});m.show();}
     void choosePlaylist(Track t){List<String> names=store.getPlaylists();if(names.isEmpty()){new AlertDialog.Builder(this).setMessage("Create a playlist first?").setNegativeButton("Cancel",null).setPositiveButton("Create",(a,b)->createPlaylist(t)).show();return;}names.add(0,"Create new playlist…");String[] a=names.toArray(new String[0]);new AlertDialog.Builder(this).setTitle("Add to playlist").setItems(a,(d,w)->{if(w==0)createPlaylist(t);else store.addToPlaylist(a[w],t.id);}).show();}
     void createPlaylist(Track add){EditText input=new EditText(this);input.setSingleLine(true);input.setHint("Playlist name");new AlertDialog.Builder(this).setTitle("New playlist").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Create",(d,w)->{String n=input.getText().toString().trim();if(n.isEmpty())return;store.createPlaylist(n);if(add!=null)store.addToPlaylist(n,add.id);playlist=n;tab="playlists";screen="detail";render();}).show();}
     void showQueue(){if(player==null||player.getMediaItemCount()==0){Toast.makeText(this,"The queue is empty.",0).show();return;}String[] titles=new String[player.getMediaItemCount()];for(int i=0;i<titles.length;i++){MediaItem m=player.getMediaItemAt(i);titles[i]=(i==player.getCurrentMediaItemIndex()?"▶  ":"")+(m.mediaMetadata.title==null?"Unknown track":m.mediaMetadata.title.toString());}new AlertDialog.Builder(this).setTitle("Queue").setItems(titles,(d,w)->player.seekTo(w,0)).setPositiveButton("Done",null).show();}
