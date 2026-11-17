@@ -63,7 +63,7 @@ public final class MainActivity extends AppCompatActivity implements Player.List
         TextView art=txt("♫",22,true,Color.WHITE);art.setGravity(Gravity.CENTER);art.setBackground(gradient(new int[]{0xFFB78D7C,0xFF596B70},12));mini.addView(art,new LinearLayout.LayoutParams(d(44),d(44)));
         LinearLayout meta=new LinearLayout(this);meta.setOrientation(1);meta.setPadding(d(10),0,d(8),0);
         miniName=txt("Choose something to play",13,true,INK);miniArtist=txt("Music for every moment",11,false,MUTED);meta.addView(miniName);meta.addView(miniArtist);mini.addView(meta,new LinearLayout.LayoutParams(0,-2,1));
-        miniToggle=txt("▶",20,true,INK);mini.addView(miniToggle);
+        miniToggle=txt("▶",20,true,INK);mini.addView(miniToggle);miniToggle.setOnClickListener(v->toggle());
         mini.setOnClickListener(v->{if(current()!=null){screen="player";render();}});
         LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,d(60));mp.setMargins(d(12),d(5),d(12),d(7));root.addView(mini,mp);
         nav=new LinearLayout(this);nav.setGravity(Gravity.CENTER);nav.setPadding(d(5),d(3),d(5),d(5));root.addView(nav,new LinearLayout.LayoutParams(-1,d(62)));
@@ -124,7 +124,7 @@ public final class MainActivity extends AppCompatActivity implements Player.List
         LinearLayout banner=new LinearLayout(this);banner.setOrientation(1);banner.setGravity(Gravity.BOTTOM);banner.setPadding(d(19),d(17),d(19),d(17));banner.setBackground(gradient(new int[]{0xFFCE9D86,0xFF796C67,0xFF242B2B},22));banner.addView(txt("F E A T U R E D   P L A Y L I S T",10,true,Color.WHITE));space(banner,5);banner.addView(txt("Chill Indian Vibes",23,true,Color.WHITE));banner.addView(txt("Hindi  ·  Indie  ·  Lo-Fi",13,false,Color.WHITE));p.addView(banner,new LinearLayout.LayoutParams(-1,d(174)));banner.setOnClickListener(v->searchFor("chill"));
         header(p,"Recently Played","View all",()->go("library"));horizontalTracks(p,recent());
         header(p,"Made for your mood","Explore",()->go("search"));LinearLayout moods=new LinearLayout(this);String[] moodsText={"♫\nIndie Picks","◉\nLo-Fi Focus","☾\nNight Drive"};for(String s:moodsText){TextView c=txt(s,13,true,INK);c.setGravity(Gravity.CENTER);c.setBackground(box(ALT,16,LINE));LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(0,d(76),1);q.setMargins(d(3),0,d(3),0);moods.addView(c,q);c.setOnClickListener(v->searchFor(s.replace("\n"," ").toLowerCase(Locale.ROOT)));}p.addView(moods);
-        if(tracks.isEmpty()){space(p,15);p.addView(empty("Loading your music","Connecting to YouTube Music…"));}
+        if(tracks.isEmpty()){space(p,15);View loading=empty(discoveryLoading?"Loading your music":"Music is not available yet",discoveryLoading?"Connecting to YouTube Music…":"Tap to retry the catalogue connection.");loading.setOnClickListener(v->{discoveryLoaded=false;loadDiscovery();});p.addView(loading);}
         else{header(p,"Your music","See all",()->go("library"));rows(p,filterLanguage(tracks),5);}
         return scroll(p);
     }
