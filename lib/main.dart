@@ -2179,6 +2179,7 @@ class AppSettingsSheet extends StatelessWidget {
                 _sectionLabel('PLAYBACK & AUDIO'),
                 const SizedBox(height: 9),
                 _row(
+                  context: context,
                   icon: Icons.graphic_eq_rounded,
                   title: 'Playback & sound',
                   subtitle: 'Quality, normalization, limiter and bass',
@@ -2188,6 +2189,7 @@ class AppSettingsSheet extends StatelessWidget {
                 _sectionLabel('YOUR MUSIC'),
                 const SizedBox(height: 9),
                 _row(
+                  context: context,
                   icon: Icons.language_rounded,
                   title: 'Catalogue & languages',
                   subtitle: languageSummary,
@@ -2258,6 +2260,7 @@ class AppSettingsSheet extends StatelessWidget {
       );
 
   Widget _row({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
