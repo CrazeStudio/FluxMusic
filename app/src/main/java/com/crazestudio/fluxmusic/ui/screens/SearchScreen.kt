@@ -233,7 +233,34 @@ fun SearchScreen(
                         modifier = Modifier.padding(vertical = 16.dp)
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
-                        Text("Searching…", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (searchState.results.isEmpty()) "Searching…" else "Updating results…",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+                if (searchState.results.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Saved matches",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    itemsIndexed(searchState.results, key = { _, t -> "sres_cached_${t.id}" }) { index, track ->
+                        TrackRow(
+                            track = track,
+                            isPlayingThis = track.id == activeTrackId,
+                            isFavorite = track.id in favoriteIds,
+                            onClick = {
+                                onSubmitSearch(trimmed)
+                                onPlayTracks(searchState.results, index, "Search · $trimmed")
+                            },
+                            onToggleFavorite = { onToggleFavorite(track) },
+                            onPlayNext = { onPlayNext(track) },
+                            onAddToQueue = { onAddToQueue(track) },
+                            onAddToPlaylist = { onAddToPlaylist(track) }
+                        )
                     }
                 }
             } else if (searchState.error != null) {
