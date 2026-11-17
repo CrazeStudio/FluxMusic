@@ -37,20 +37,8 @@ android {
         }
     }
 
-    signingConfigs {
-        debugConfig {
-            storeFile file("${rootDir}/debug.keystore")
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
-        }
-    }
-
-    buildTypes {
-        debug {
-            signingConfig signingConfigs.debugConfig
-        }
-    }
+    // Let the Android Gradle Plugin create/use its standard local debug keystore.
+    // A repository-root debug.keystore is not guaranteed to exist in CI.
 }
 
 dependencies {
