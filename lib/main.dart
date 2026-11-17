@@ -15,14 +15,11 @@ import 'models/catalogue_preferences.dart';
 import 'models/track.dart';
 import 'services/flux_audio_handler.dart';
 
-late final FluxAudioHandler fluxAudio;\nfinal ValueNotifier<ThemeMode> fluxThemeMode = ValueNotifier<ThemeMode>(ThemeMode.light);
+late final FluxAudioHandler fluxAudio;
+final ValueNotifier<ThemeMode> fluxThemeMode = ValueNotifier<ThemeMode>(ThemeMode.light);
 
-const _ink = Color(0xFFF5F5F5);
-const _cardInk = Color(0xFF29261F);
 const _mint = Color(0xFFFF8A35);
 const _violet = Color(0xFFFFB16D);
-const _muted = Color(0xFFB8B8B8);
-const _playerMuted = Color(0xFFA3A3A3);
 
 class _YtMusicPlaylist {
   const _YtMusicPlaylist({
@@ -109,7 +106,11 @@ class _YtMusicPlaylist {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();\n  try {\n    final prefs = await SharedPreferences.getInstance();\n    fluxThemeMode.value = prefs.getString('fluxmusic.theme_mode.v1') == 'dark' ? ThemeMode.dark : ThemeMode.light;\n  } catch (_) {}
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    fluxThemeMode.value = prefs.getString('fluxmusic.theme_mode.v1') == 'dark' ? ThemeMode.dark : ThemeMode.light;
+  } catch (_) {}
   await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
     DeviceOrientation.portraitUp,
     DeviceOrientation.landscapeLeft,
@@ -156,7 +157,7 @@ class FluxMusicApp extends StatelessWidget {
       textTheme: TextTheme(
         headlineLarge: TextStyle(fontSize: 29, fontWeight: FontWeight.w800, letterSpacing: -1.1, color: scheme.onSurface),
         headlineMedium: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.7, color: scheme.onSurface),
-        titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w750, color: scheme.onSurface),
+        titleLarge: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: scheme.onSurface),
         titleMedium: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: scheme.onSurface),
         bodyMedium: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
       ),
@@ -393,18 +394,18 @@ class _MusicHomeState extends State<MusicHome> {
               Row(children: <Widget>[
                 SizedBox(width: 44, height: 44, child: Center(child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain))),
                 const SizedBox(width: 12),
-                const Text('FluxMusic', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8)),
+                Text('FluxMusic', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8)),
               ]),
               const SizedBox(height: 30),
-              const Text('Make your catalogue yours', style: TextStyle(fontSize: 29, height: 1.12, fontWeight: FontWeight.w800, letterSpacing: -.9)),
+              Text('Make your catalogue yours', style: TextStyle(fontSize: 29, height: 1.12, fontWeight: FontWeight.w800, letterSpacing: -.9)),
               const SizedBox(height: 9),
-              const Text(
+              Text(
                 'Choose every language you enjoy. We’ll put those music searches first. You can skip and get a mixed, randomized catalogue instead.',
                 style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 13, height: 1.5),
               ),
               const SizedBox(height: 20),
               Row(children: <Widget>[
-                const Expanded(child: Text('Your languages', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                Expanded(child: Text('Your languages', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
                 Text('${_selectedLanguages.length} selected', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
               ]),
               const SizedBox(height: 12),
@@ -439,7 +440,7 @@ class _MusicHomeState extends State<MusicHome> {
                 Expanded(
                   child: TextButton(
                     onPressed: () => _finishPersonalization(skip: true),
-                    child: const Text('Skip · random catalogue', textAlign: TextAlign.center),
+                    child: Text('Skip · random catalogue', textAlign: TextAlign.center),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -447,7 +448,7 @@ class _MusicHomeState extends State<MusicHome> {
                   child: FilledButton.icon(
                     onPressed: _selectedLanguages.isEmpty ? null : () => _finishPersonalization(skip: false),
                     icon: Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Personalize'),
+                    label: Text('Personalize'),
                   ),
                 ),
               ]),
@@ -483,7 +484,7 @@ class _MusicHomeState extends State<MusicHome> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Create playlist'),
+        title: Text('Create playlist'),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -493,8 +494,8 @@ class _MusicHomeState extends State<MusicHome> {
           onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
         ),
         actions: <Widget>[
-          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: const Text('Create')),
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: Text('Create')),
         ],
       ),
     );
@@ -540,7 +541,7 @@ class _MusicHomeState extends State<MusicHome> {
             TextButton.icon(
               onPressed: () => Navigator.of(sheetContext).pop('__create__'),
               icon: Icon(Icons.add_rounded),
-              label: const Text('Create a new playlist'),
+              label: Text('Create a new playlist'),
             ),
           ],
         ),
@@ -712,7 +713,7 @@ class _MusicHomeState extends State<MusicHome> {
                   unawaited(_playList(tracks, 0));
                 },
                 icon: Icon(Icons.play_arrow_rounded),
-                label: const Text('Play all'),
+                label: Text('Play all'),
               ),
               const SizedBox(width: 8),
               TextButton.icon(
@@ -721,7 +722,7 @@ class _MusicHomeState extends State<MusicHome> {
                   unawaited(_createPlaylist());
                 },
                 icon: Icon(Icons.add_rounded),
-                label: const Text('New playlist'),
+                label: Text('New playlist'),
               ),
             ]),
             const Divider(color: Color(0xFF333333)),
@@ -749,13 +750,13 @@ class _MusicHomeState extends State<MusicHome> {
             onPressed: () => setState(() => _libraryFilter = 0),
             style: IconButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.surface,
-              foregroundColor: _ink,
+              foregroundColor: Theme.of(context).colorScheme.onSurface,
               side: const BorderSide(color: Color(0xFF333333)),
             ),
             icon: Icon(Icons.arrow_back_rounded),
           ),
           const SizedBox(width: 10),
-          const Expanded(child: Text('Your playlists', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface))),
+          Expanded(child: Text('Your playlists', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface))),
           IconButton.filledTonal(
             tooltip: 'Create playlist',
             onPressed: _createPlaylist,
@@ -781,7 +782,7 @@ class _MusicHomeState extends State<MusicHome> {
                       width: 56,
                       height: 56,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
+                        gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: <Color>[Color(0xFFFF8A35), Color(0xFF3A2518)],
@@ -804,10 +805,10 @@ class _MusicHomeState extends State<MusicHome> {
                     context: context,
                     builder: (dialogContext) => AlertDialog(
                       title: Text('Delete "${entry.key}"?'),
-                      content: const Text('This removes the local playlist, not the songs from YouTube Music.'),
+                      content: Text('This removes the local playlist, not the songs from YouTube Music.'),
                       actions: <Widget>[
-                        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('Cancel')),
-                        FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('Delete')),
+                        TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text('Cancel')),
+                        FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: Text('Delete')),
                       ],
                     ),
                   );
@@ -933,14 +934,14 @@ class _MusicHomeState extends State<MusicHome> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Theme.of(context).colorScheme.surface,
-        title: const Text('Clear listening history?'),
-        content: const Text('This removes recently played tracks from this device. Your liked tracks stay saved.'),
+        title: Text('Clear listening history?'),
+        content: Text('This removes recently played tracks from this device. Your liked tracks stay saved.'),
         actions: <Widget>[
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: _ink),
+            style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: Theme.of(context).colorScheme.onSurface),
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Clear history'),
+            child: Text('Clear history'),
           ),
         ],
       ),
@@ -974,14 +975,14 @@ class _MusicHomeState extends State<MusicHome> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: Theme.of(context).colorScheme.surface,
-          title: const Text('Keep playback controls available'),
-          content: const Text('Notifications let FluxMusic show playback controls on your lock screen and notification shade while music plays. You can continue without allowing them.'),
+          title: Text('Keep playback controls available'),
+          content: Text('Notifications let FluxMusic show playback controls on your lock screen and notification shade while music plays. You can continue without allowing them.'),
           actions: <Widget>[
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Not now')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: Text('Not now')),
             FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: _ink),
+              style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: Theme.of(context).colorScheme.onSurface),
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Allow notifications'),
+              child: Text('Allow notifications'),
             ),
           ],
         ),
@@ -1069,7 +1070,7 @@ class _MusicHomeState extends State<MusicHome> {
   @override
   Widget build(BuildContext context) {
     if (!_preferencesLoaded) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Center(child: CircularProgressIndicator(color: _mint)),
       );
@@ -1100,7 +1101,7 @@ class _MusicHomeState extends State<MusicHome> {
                 ),
                 _miniPlayer(),
                 Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Theme.of(context).scaffoldBackgroundColor,
                     border: Border(top: BorderSide(color: Color(0xFF292929))),
                   ),
@@ -1172,7 +1173,7 @@ class _MusicHomeState extends State<MusicHome> {
             height: 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: <Color>[Color(0xFF38251A), Theme.of(context).colorScheme.surface],
@@ -1231,9 +1232,9 @@ class _MusicHomeState extends State<MusicHome> {
       children: <Widget>[
         const SizedBox(height: 4),
         Row(children: <Widget>[
-          const Expanded(child: Text('Recently played', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4))),
+          Expanded(child: Text('Recently played', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4))),
           if (recent.isNotEmpty)
-            TextButton(onPressed: () => setState(() { _tab = 2; _libraryFilter = 1; }), style: TextButton.styleFrom(foregroundColor: _mint), child: const Text('See all', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+            TextButton(onPressed: () => setState(() { _tab = 2; _libraryFilter = 1; }), style: TextButton.styleFrom(foregroundColor: _mint), child: Text('See all', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
         ]),
         const SizedBox(height: 10),
         SizedBox(
@@ -1257,7 +1258,7 @@ class _MusicHomeState extends State<MusicHome> {
                 ),
         ),
         if (personalized) ...<Widget>[
-          const Text('Your languages', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
+          Text('Your languages', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
           const SizedBox(height: 10),
           SizedBox(
             height: 112,
@@ -1287,7 +1288,7 @@ class _MusicHomeState extends State<MusicHome> {
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
             Text('For you', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
           ])),
-          TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: const Text('Explore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+          TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: Text('Explore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
         ]),
         const SizedBox(height: 11),
         SizedBox(
@@ -1307,7 +1308,7 @@ class _MusicHomeState extends State<MusicHome> {
           const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
             Text('Categories', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
           ])),
-          TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: const Text('Browse all ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+          TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: Text('Browse all ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
         ]),
         const SizedBox(height: 10),
         GridView.count(
@@ -1328,7 +1329,7 @@ class _MusicHomeState extends State<MusicHome> {
         ),
         const SizedBox(height: 18),
         if (_recent.isNotEmpty) ...<Widget>[
-          const Text('Your listening history', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text('Your listening history', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
           ..._recent.take(4).toList().asMap().entries.map((entry) => _recentTrackRow(entry.value, entry.key)),
         ],
@@ -1343,7 +1344,7 @@ class _MusicHomeState extends State<MusicHome> {
             children: <Widget>[
               SizedBox(width: 24, height: 24, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
               const SizedBox(width: 8),
-              const Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+              Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
             ],
           ),
         ),
@@ -1464,7 +1465,7 @@ class _MusicHomeState extends State<MusicHome> {
                   Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Row(children: <Widget>[
-                    const Text('PLAY MIX', style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w800, letterSpacing: 1.05)),
+                    Text('PLAY MIX', style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w800, letterSpacing: 1.05)),
                     const Spacer(),
                     Icon(Icons.arrow_outward_rounded, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .72), size: 13),
                   ]),
@@ -1504,7 +1505,7 @@ class _MusicHomeState extends State<MusicHome> {
                       child: Container(
                         width: 27,
                         height: 27,
-                        decoration: const BoxDecoration(color: _mint, shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: _mint, shape: BoxShape.circle),
                         child: Icon(Icons.play_arrow_rounded, color: Theme.of(context).colorScheme.onSurface, size: 19),
                       ),
                     ),
@@ -1526,11 +1527,11 @@ class _MusicHomeState extends State<MusicHome> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-        const Text('Search', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface)),
+        Text('Search', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface)),
         const SizedBox(height: 14),
         Wrap(spacing: 8, children: <Widget>[
           ChoiceChip(
-            label: const Text('Songs'),
+            label: Text('Songs'),
             selected: !_searchPlaylistsMode,
             onSelected: (_) => setState(() {
               _searchPlaylistsMode = false;
@@ -1540,7 +1541,7 @@ class _MusicHomeState extends State<MusicHome> {
             }),
           ),
           ChoiceChip(
-            label: const Text('Playlists'),
+            label: Text('Playlists'),
             selected: _searchPlaylistsMode,
             onSelected: (_) => setState(() {
               _searchPlaylistsMode = true;
@@ -1565,7 +1566,7 @@ class _MusicHomeState extends State<MusicHome> {
                     subtitle: 'Search YouTube Music, then open a result to load its track list.',
                   )
                 : ListView(padding: const EdgeInsets.only(bottom: 16), children: <Widget>[
-                    const Text('Browse categories', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
+                    Text('Browse categories', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
                     const SizedBox(height: 10),
                     Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
                       _genreTile('Electronic', const Color(0xFF25202B), 'electronic music'),
@@ -1578,7 +1579,7 @@ class _MusicHomeState extends State<MusicHome> {
                     const SizedBox(height: 22),
                     Row(children: <Widget>[
                       Expanded(child: Text(_searchHistory.isEmpty ? 'Try a search' : 'Recent searches', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-                      if (_searchHistory.isNotEmpty) TextButton(onPressed: _clearSearchHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: const Text('Clear', style: TextStyle(fontSize: 11))),
+                      if (_searchHistory.isNotEmpty) TextButton(onPressed: _clearSearchHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: Text('Clear', style: TextStyle(fontSize: 11))),
                     ]),
                     const SizedBox(height: 4),
                     if (_searchHistory.isNotEmpty)
@@ -1619,7 +1620,7 @@ class _MusicHomeState extends State<MusicHome> {
                                           Icon(Icons.cloud_done_rounded, color: _mint, size: 25),
                                           const SizedBox(width: 10),
                                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                                            const Text('YouTube Music playlist loaded', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                            Text('YouTube Music playlist loaded', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                                             Text(_loadedOnlinePlaylistTitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
                                           ])),
                                           const SizedBox(width: 5),
@@ -1705,7 +1706,7 @@ class _MusicHomeState extends State<MusicHome> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       children: <Widget>[
-        const Text('Library', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface)),
+        Text('Library', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface)),
         const SizedBox(height: 18),
         Wrap(spacing: 8, runSpacing: 8, children: <Widget>[
           _libraryChip('Liked songs', 0),
@@ -1738,7 +1739,7 @@ class _MusicHomeState extends State<MusicHome> {
               color: _mint, shape: const CircleBorder(),
               child: InkWell(
                 customBorder: const CircleBorder(), onTap: visibleTracks.isEmpty ? null : () => _playList(visibleTracks, 0),
-                child: SizedBox(width: 42, height: 42, child: Icon(Icons.play_arrow_rounded, color: visibleTracks.isEmpty ? _muted : _ink, size: 25)),
+                child: SizedBox(width: 42, height: 42, child: Icon(Icons.play_arrow_rounded, color: visibleTracks.isEmpty ? Theme.of(context).colorScheme.onSurfaceVariant : Theme.of(context).colorScheme.onSurface, size: 25)),
               ),
             )),
           ]),
@@ -1747,7 +1748,7 @@ class _MusicHomeState extends State<MusicHome> {
         Row(children: <Widget>[
           Expanded(child: Text(showingRecent ? 'Listening history' : 'Your liked tracks', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -.2))),
           if (showingRecent && _recent.isNotEmpty)
-            TextButton(onPressed: _clearListeningHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: const Text('Clear', style: TextStyle(fontSize: 11))),
+            TextButton(onPressed: _clearListeningHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: Text('Clear', style: TextStyle(fontSize: 11))),
         ]),
         const SizedBox(height: 7),
         if (visibleTracks.isEmpty)
@@ -1783,7 +1784,7 @@ class _MusicHomeState extends State<MusicHome> {
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? const Color(0xFF17110D) : _muted,
+              color: selected ? const Color(0xFF17110D) : Theme.of(context).colorScheme.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w800,
             ),
@@ -1852,7 +1853,7 @@ class _MusicHomeState extends State<MusicHome> {
               tooltip: favorite ? 'Remove from favourites' : 'Add to favourites',
               visualDensity: VisualDensity.compact,
               onPressed: () => _toggleFavorite(track),
-              icon: Icon(favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: favorite ? _mint : _muted, size: 20),
+              icon: Icon(favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: favorite ? _mint : Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
             ),
             PopupMenuButton<String>(
               tooltip: 'Track options',
@@ -2018,7 +2019,15 @@ class _MusicHomeState extends State<MusicHome> {
   }
 }
 
-Future<void> _saveThemeMode(bool dark) async {\n  fluxThemeMode.value = dark ? ThemeMode.dark : ThemeMode.light;\n  try {\n    final prefs = await SharedPreferences.getInstance();\n    await prefs.setString('fluxmusic.theme_mode.v1', dark ? 'dark' : 'light');\n  } catch (_) {}\n}\n\nclass AppSettingsSheet extends StatelessWidget {
+Future<void> _saveThemeMode(bool dark) async {
+  fluxThemeMode.value = dark ? ThemeMode.dark : ThemeMode.light;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('fluxmusic.theme_mode.v1', dark ? 'dark' : 'light');
+  } catch (_) {}
+}
+
+class AppSettingsSheet extends StatelessWidget {
   const AppSettingsSheet({
     super.key,
     required this.languageSummary,
@@ -2034,7 +2043,7 @@ Future<void> _saveThemeMode(bool dark) async {\n  fluxThemeMode.value = dark ? T
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -2132,7 +2141,7 @@ Future<void> _saveThemeMode(bool dark) async {\n  fluxThemeMode.value = dark ? T
                     children: <Widget>[
                       SizedBox(width: 22, height: 22, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
                       const SizedBox(width: 8),
-                      const Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+                      Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
                     ],
                   ),
                 ),
@@ -2293,7 +2302,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
     child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
       Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
       const SizedBox(height: 22),
-      const Row(children: <Widget>[
+      Row(children: <Widget>[
         Icon(Icons.graphic_eq_rounded, color: _mint, size: 32),
         SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
@@ -2303,27 +2312,27 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
         ])),
       ]),
       const SizedBox(height: 18),
-      const Align(alignment: Alignment.centerLeft, child: Text('Streaming quality', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800))),
+      Align(alignment: Alignment.centerLeft, child: Text('Streaming quality', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800))),
       const SizedBox(height: 7),
       Wrap(spacing: 7, runSpacing: 6, children: <Widget>[
         ChoiceChip(
-          label: const Text('Data saver'),
+          label: Text('Data saver'),
           selected: _quality == FluxAudioQuality.dataSaver,
           onSelected: (selected) { if (selected) unawaited(_setQuality(FluxAudioQuality.dataSaver)); },
         ),
         ChoiceChip(
-          label: const Text('Balanced'),
+          label: Text('Balanced'),
           selected: _quality == FluxAudioQuality.balanced,
           onSelected: (selected) { if (selected) unawaited(_setQuality(FluxAudioQuality.balanced)); },
         ),
         ChoiceChip(
-          label: const Text('High'),
+          label: Text('High'),
           selected: _quality == FluxAudioQuality.high,
           onSelected: (selected) { if (selected) unawaited(_setQuality(FluxAudioQuality.high)); },
         ),
       ]),
       const SizedBox(height: 4),
-      const Align(
+      Align(
         alignment: Alignment.centerLeft,
         child: Text('Uses the nearest available audio bitrate; high quality may use more data. Source availability varies and this is not lossless upscaling.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10.5, height: 1.35)),
       ),
@@ -2337,7 +2346,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
       _tile(Icons.speaker_rounded, 'Bass boost', 'Adds weight to low frequencies for bass-forward listening.', _bassBoost, (v) => _set('bassBoost', v)),
       if (_note != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_note!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))),
       const SizedBox(height: 12),
-      const Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 10)),
+      Text('Effect support depends on Android version and device audio hardware.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 10)),
     ]),
   ));
 
@@ -2356,7 +2365,7 @@ class _AudioEnhancementsSheetState extends State<AudioEnhancementsSheet> {
         const SizedBox(height: 4),
         Text(subtitle, style: TextStyle(fontSize: 10.5, color: Theme.of(context).colorScheme.onSurfaceVariant, height: 1.35)),
       ])),
-      Switch.adaptive(value: value, activeThumbColor: _ink, activeTrackColor: _mint, onChanged: onChanged),
+      Switch.adaptive(value: value, activeThumbColor: Colors.white, activeTrackColor: _mint, onChanged: onChanged),
     ]),
   );
 }
@@ -2405,7 +2414,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                 const SizedBox(height: 10),
                 Row(children: <Widget>[
                   IconButton(visualDensity: VisualDensity.compact, onPressed: () => Navigator.of(context).pop(), icon: Icon(Icons.keyboard_arrow_down_rounded, size: 27)),
-                  const Expanded(child: Text('NOW PLAYING', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.6))),
+                  Expanded(child: Text('NOW PLAYING', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.6))),
                   PopupMenuButton<String>(
                     tooltip: 'More playback options', icon: Icon(Icons.more_horiz_rounded, size: 24), color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     onSelected: (value) async {
@@ -2470,7 +2479,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   IconButton(tooltip: _liked ? 'Remove from favourites' : 'Add to favourites', onPressed: () async {
                     await widget.onToggleFavorite(track);
                     if (mounted) setState(() => _liked = widget.isFavorite(track));
-                  }, icon: Icon(_liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: _liked ? _mint : _playerMuted, size: 25)),
+                  }, icon: Icon(_liked ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: _liked ? _mint : Theme.of(context).colorScheme.onSurfaceVariant, size: 25)),
                 ]),
                 ValueListenableBuilder<Duration?>(
                   valueListenable: widget.handler.sleepTimerRemaining,
@@ -2532,17 +2541,17 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                 if (playback?.errorMessage != null) ...<Widget>[
                   Padding(padding: const EdgeInsets.only(top: 4), child: Row(children: <Widget>[
                     Expanded(child: Text(playback!.errorMessage!, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Color(0xFFFFA7B5), fontSize: 10))),
-                    TextButton(onPressed: () => widget.handler.play(), child: const Text('Retry', style: TextStyle(color: _mint, fontSize: 11))),
+                    TextButton(onPressed: () => widget.handler.play(), child: Text('Retry', style: TextStyle(color: _mint, fontSize: 11))),
                   ])),
                 ],
                 const SizedBox(height: 7),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: <Widget>[
-                  IconButton(tooltip: widget.handler.shuffleEnabled ? 'Turn shuffle off' : 'Shuffle queue', onPressed: () async { await widget.handler.toggleShuffle(); if (mounted) setState(() {}); }, icon: Icon(Icons.shuffle_rounded, color: widget.handler.shuffleEnabled ? _mint : _playerMuted, size: 21)),
+                  IconButton(tooltip: widget.handler.shuffleEnabled ? 'Turn shuffle off' : 'Shuffle queue', onPressed: () async { await widget.handler.toggleShuffle(); if (mounted) setState(() {}); }, icon: Icon(Icons.shuffle_rounded, color: widget.handler.shuffleEnabled ? _mint : Theme.of(context).colorScheme.onSurfaceVariant, size: 21)),
                   IconButton(onPressed: () => widget.handler.skipToPrevious(), icon: Icon(Icons.skip_previous_rounded, size: 29)),
                   Container(
                     width: 62,
                     height: 62,
-                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black),
                     child: IconButton(
                       tooltip: playing ? 'Pause' : 'Play',
                       onPressed: () => playing ? widget.handler.pause() : widget.handler.play(),
@@ -2562,7 +2571,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                     },
                     icon: Icon(
                       widget.handler.repeatMode == FluxRepeatMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                      color: widget.handler.repeatMode == FluxRepeatMode.off ? _playerMuted : _mint,
+                      color: widget.handler.repeatMode == FluxRepeatMode.off ? Theme.of(context).colorScheme.onSurfaceVariant : _mint,
                       size: 21,
                     ),
                   ),
@@ -2572,7 +2581,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   borderRadius: BorderRadius.circular(14),
                   onTap: () => showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true, backgroundColor: Colors.transparent, builder: (_) => LyricsSheet(item: item, handler: widget.handler)),
                   child: Container(height: 60, padding: const EdgeInsets.symmetric(horizontal: 14), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, borderRadius: BorderRadius.circular(14)),
-                    child: const Row(children: <Widget>[
+                    child: Row(children: <Widget>[
                       Icon(Icons.lyrics_rounded, color: _mint, size: 21), SizedBox(width: 12),
                       Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                         Text('View lyrics', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
@@ -2594,15 +2603,15 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                       builder: (sheetContext) => Container(
                         height: MediaQuery.sizeOf(sheetContext).height * .7,
                         padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: Theme.of(context).scaffoldBackgroundColor,
                           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                         ),
                         child: Column(children: <Widget>[
                           Container(width: 42, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(8))),
                           const SizedBox(height: 16),
-                          const Align(alignment: Alignment.centerLeft, child: Text('Up next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
-                          const Align(alignment: Alignment.centerLeft, child: Text('Hold to reorder · swipe to remove', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))),
+                          Align(alignment: Alignment.centerLeft, child: Text('Up next', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
+                          Align(alignment: Alignment.centerLeft, child: Text('Hold to reorder · swipe to remove', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11))),
                           const SizedBox(height: 8),
                           Expanded(
                             child: StreamBuilder<List<MediaItem>>(
@@ -2896,7 +2905,8 @@ class _LyricsSheetState extends State<LyricsSheet> {
   List<_LyricLine> _parseLrc(String lyrics) {
     final timestamp = RegExp(r'\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]');
     final parsed = <_LyricLine>[];
-    for (final rawLine in lyrics.split(RegExp(r'\r?\n'))) {
+    for (final rawLine in lyrics.split(RegExp(r'\r?
+'))) {
       final matches = timestamp.allMatches(rawLine).toList();
       if (matches.isEmpty) continue;
       final text = rawLine.replaceAll(timestamp, '').trim();
@@ -2965,7 +2975,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: active ? _ink : _playerMuted,
+                      color: active ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: active ? 17 : 14,
                       height: 1.3,
                       fontWeight: active ? FontWeight.w800 : FontWeight.w500,
@@ -2987,7 +2997,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
       child: Container(
       height: MediaQuery.sizeOf(context).height * .78,
       padding: const EdgeInsets.fromLTRB(22, 12, 22, 24),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -2999,7 +3009,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
             children: <Widget>[
               Icon(Icons.lyrics_rounded, color: _mint, size: 25),
               const SizedBox(width: 10),
-              const Expanded(child: Text('Lyrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+              Expanded(child: Text('Lyrics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
               IconButton(onPressed: _loadLyrics, tooltip: 'Reload lyrics', icon: Icon(Icons.refresh_rounded)),
               IconButton(onPressed: () => Navigator.of(context).pop(), tooltip: 'Close lyrics', icon: Icon(Icons.close_rounded)),
             ],
@@ -3033,7 +3043,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
                           const SizedBox(height: 12),
                           Text(_message ?? 'Lyrics not found', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
                           const SizedBox(height: 12),
-                          FilledButton.tonalIcon(onPressed: _loadLyrics, icon: Icon(Icons.refresh_rounded), label: const Text('Try again')),
+                          FilledButton.tonalIcon(onPressed: _loadLyrics, icon: Icon(Icons.refresh_rounded), label: Text('Try again')),
                         ],
                       ))
                     : Column(
@@ -3054,7 +3064,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
                                   ),
                           ),
                           const SizedBox(height: 14),
-                          const Text('Lyrics provided by LRCLIB. Availability and accuracy may vary.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+                          Text('Lyrics provided by LRCLIB. Availability and accuracy may vary.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
                         ],
                       ),
           ),
@@ -3095,7 +3105,7 @@ class _DecorativeArt extends StatelessWidget {
       child: Stack(children: <Widget>[
         Positioned(right: -size * .04, top: size * .08, child: Container(width: size * .68, height: size * .68, decoration: BoxDecoration(shape: BoxShape.circle, color: accent.withValues(alpha: .88)))),
         Positioned(left: size * .10, bottom: size * .17, child: Container(width: size * .80, height: size * .14, decoration: BoxDecoration(color: const Color(0xFFFF8A35), borderRadius: BorderRadius.circular(size * .08)))),
-        Positioned(left: size * .18, top: size * .13, child: Container(width: size * .18, height: size * .18, decoration: const BoxDecoration(shape: BoxShape.circle, color: Theme.of(context).scaffoldBackgroundColor))),
+        Positioned(left: size * .18, top: size * .13, child: Container(width: size * .18, height: size * .18, decoration: BoxDecoration(shape: BoxShape.circle, color: Theme.of(context).scaffoldBackgroundColor))),
         Positioned(right: size * .17, bottom: size * .12, child: Container(width: size * .13, height: size * .13, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withValues(alpha: .72)))),
       ]),
     );
@@ -3117,7 +3127,7 @@ class _CoverArt extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: <Color>[Color(0xFF3A2A22), Color(0xFF24203E)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -3224,9 +3234,9 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onRetry,
-              style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: _ink),
+              style: FilledButton.styleFrom(backgroundColor: _mint, foregroundColor: Theme.of(context).colorScheme.onSurface),
               icon: Icon(Icons.refresh_rounded),
-              label: const Text('Try again'),
+              label: Text('Try again'),
             ),
           ],
         ),
