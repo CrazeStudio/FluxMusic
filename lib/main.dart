@@ -18,7 +18,7 @@ import 'services/flux_audio_handler.dart';
 late final FluxAudioHandler fluxAudio;
 final ValueNotifier<ThemeMode> fluxThemeMode = ValueNotifier<ThemeMode>(ThemeMode.light);
 
-const _mint = Color(0xFFFF8A35);
+const _mint = Color(0xFFE97732);
 const _violet = Color(0xFFFFB16D);
 
 class _YtMusicPlaylist {
@@ -3004,8 +3004,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
   List<_LyricLine> _parseLrc(String lyrics) {
     final timestamp = RegExp(r'\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]');
     final parsed = <_LyricLine>[];
-    for (final rawLine in lyrics.split(RegExp(r'\r?
-'))) {
+    for (final rawLine in lyrics.split(RegExp(r'\r?\n'))) {
       final matches = timestamp.allMatches(rawLine).toList();
       if (matches.isEmpty) continue;
       final text = rawLine.replaceAll(timestamp, '').trim();
