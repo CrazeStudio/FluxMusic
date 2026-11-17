@@ -443,23 +443,16 @@ object YtMusicCatalog {
                 urlString
             }
             val conn = (URL(requestUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = if (useYoutubePlaybackProtocol) "POST" else "GET"
+                // Match the media datasource: a ranged GET with a fresh rn parameter.
+                requestMethod = "GET"
                 instanceFollowRedirects = true
                 connectTimeout = 5000
                 readTimeout = 5000
                 setRequestProperty("User-Agent", userAgent)
                 setRequestProperty("Accept-Encoding", "identity")
                 setRequestProperty("Range", "bytes=0-1")
-                if (useYoutubePlaybackProtocol) {
-                    // Required by YouTube's videoplayback endpoint; a plain GET can be rejected.
-                    setRequestProperty("TE", "trailers")
-                    doOutput = true
-                }
             }
             try {
-                if (useYoutubePlaybackProtocol) {
-                    conn.outputStream.use { it.write(byteArrayOf(0x78, 0x00)) }
-                }
                 val code = conn.responseCode
                 val contentType = conn.contentType.orEmpty()
                 if (code !in 200..299) {
