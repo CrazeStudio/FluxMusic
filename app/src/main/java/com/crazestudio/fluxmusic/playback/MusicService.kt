@@ -17,6 +17,7 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -101,39 +102,37 @@ class MusicService : MediaSessionService() {
             .setReadTimeoutMs(15000)
 
         val resolvingFactory = ResolvingDataSource.Factory(httpFactory) { dataSpec: DataSpec ->
-            val videoId = Track.extractVideoId(dataSpec.uri) ?: return@Factory dataSpec
-            if (offlineCacheMode) {
-                throw IOException("Offline Cache Mode is enabled. Disable it in Settings to stream online.")
+            val videoId = Track.extractVideoId(dataSpec.uri)
+            if (videoId != null) {
+                if (offlineCacheMode) throw IOException("Offline Cache Mode is enabled. Disable it in Settings to stream.")
+                val shouldRefresh = forceRefreshNextVideoId == videoId
+                if (shouldRefresh) forceRefreshNextVideoId = null
+                val resolved = YtMusicCatalog.resolveAudioStream(videoId, currentQuality, shouldRefresh)
+                val visionOs = resolved.userAgent == YtMusicCatalog.VISIONOS_USER_AGENT
+                val headers = HashMap(dataSpec.httpRequestHeaders).apply {
+                    put("User-Agent", resolved.userAgent)
+                    put("Accept-Encoding", "identity")
+                    if (visionOs) put("TE", "trailers")
+                }
+                return@Factory dataSpec.buildUpon()
+                    .setUri(Uri.parse(resolved.url))
+                    .setHttpRequestHeaders(headers)
+                    .build()
             }
-            val shouldRefresh = (forceRefreshNextVideoId == videoId)
-            if (shouldRefresh) {
-                forceRefreshNextVideoId = null
-            }
-            val resolved = YtMusicCatalog.resolveAudioStream(
-                videoId = videoId,
-                quality = currentQuality,
-                forceRefresh = shouldRefresh
-            )
-            val isYoutubeVisionOsStream =
-                resolved.userAgent == YtMusicCatalog.VISIONOS_USER_AGENT
-            val requestUrl = if (isYoutubeVisionOsStream) {
-                YtMusicCatalog.prepareYoutubePlaybackUrl(resolved.url)
-            } else {
-                resolved.url
-            }
-            val headers = HashMap(dataSpec.httpRequestHeaders).apply {
-                put("User-Agent", resolved.userAgent)
-                put("Accept-Encoding", "identity")
-                if (isYoutubeVisionOsStream) {
+
+            val host = dataSpec.uri.host.orEmpty()
+            if (host.endsWith("googlevideo.com", ignoreCase = true)) {
+                val headers = HashMap(dataSpec.httpRequestHeaders).apply {
+                    put("User-Agent", YtMusicCatalog.VISIONOS_USER_AGENT)
+                    put("Accept-Encoding", "identity")
                     put("TE", "trailers")
                 }
+                return@Factory dataSpec.buildUpon()
+                    .setUri(Uri.parse(YtMusicCatalog.prepareYoutubePlaybackUrl(dataSpec.uri.toString())))
+                    .setHttpRequestHeaders(headers)
+                    .build()
             }
-            // YouTube videoplayback media requests are ranged GETs. NewPipe's
-            // datasource adds rn to the URL; it does not turn media chunks into POSTs.
-            dataSpec.buildUpon()
-                .setUri(Uri.parse(requestUrl))
-                .setHttpRequestHeaders(headers)
-                .build()
+            dataSpec
         }
 
         val extractorsFactory = DefaultExtractorsFactory()
@@ -152,8 +151,13 @@ class MusicService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
+        val trackSelector = DefaultTrackSelector(this).apply {
+            setParameters(buildUponParameters().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build())
+        }
+
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
@@ -186,6 +190,7 @@ class MusicService : MediaSessionService() {
 
             override fun onPlayerError(error: PlaybackException) {
                 stallWatchdogJob?.cancel()
+                android.util.Log.e("FluxMusicPlayback", "Playback error ${error.errorCodeName}: ${error.message}", error)
                 val currentId = player.currentMediaItem?.mediaId.orEmpty()
                 if (currentId.isNotBlank() && !offlineCacheMode && autoRetriedVideoId != currentId) {
                     autoRetriedVideoId = currentId
