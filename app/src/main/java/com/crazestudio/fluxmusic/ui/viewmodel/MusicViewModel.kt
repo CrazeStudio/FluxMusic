@@ -143,10 +143,17 @@ class MusicViewModel(
     }
 
     fun updateSearchQuery(newQuery: String, immediate: Boolean = false) {
-        _searchState.update { it.copy(query = newQuery) }
+        val trimmed = newQuery.trim()
+        _searchState.update {
+            it.copy(
+                query = newQuery,
+                isSearching = trimmed.length >= 2,
+                results = emptyList(),
+                error = null
+            )
+        }
         searchJob?.cancel()
         val requestId = ++searchGeneration
-        val trimmed = newQuery.trim()
         if (trimmed.length < 2) {
             _searchState.update { it.copy(isSearching = false, results = emptyList(), error = null) }
             return
