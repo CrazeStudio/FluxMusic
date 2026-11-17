@@ -229,7 +229,7 @@ class MusicService : MediaSessionService() {
         if (currentId.isBlank() || autoRetriedVideoId == currentId) return
 
         stallWatchdogJob = serviceScope.launch {
-            delay(8500L)
+            // Stream resolution can require more than one upstream request.\n            delay(30_000L)
             if (player.playWhenReady &&
                 player.playbackState == Player.STATE_BUFFERING &&
                 player.currentPosition <= 150L &&
