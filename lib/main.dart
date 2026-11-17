@@ -16,10 +16,10 @@ import 'models/track.dart';
 import 'services/flux_audio_handler.dart';
 
 late final FluxAudioHandler fluxAudio;
-final ValueNotifier<ThemeMode> fluxThemeMode = ValueNotifier<ThemeMode>(ThemeMode.light);
+final ValueNotifier<ThemeMode> fluxThemeMode = ValueNotifier<ThemeMode>(ThemeMode.dark);
 
-const _mint = Color(0xFFE97732);
-const _violet = Color(0xFFFFB16D);
+const _mint = Color(0xFFE9E9E9);
+const _violet = Color(0xFFBEBEBE);
 
 class _YtMusicPlaylist {
   const _YtMusicPlaylist({
@@ -109,7 +109,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final prefs = await SharedPreferences.getInstance();
-    fluxThemeMode.value = prefs.getString('fluxmusic.theme_mode.v1') == 'dark' ? ThemeMode.dark : ThemeMode.light;
+    fluxThemeMode.value = prefs.getString('fluxmusic.theme_mode.v1') == 'light' ? ThemeMode.light : ThemeMode.dark;
   } catch (_) {}
   await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[
     DeviceOrientation.portraitUp,
@@ -134,24 +134,25 @@ class FluxMusicApp extends StatelessWidget {
 
   ThemeData _theme(Brightness brightness) {
     final dark = brightness == Brightness.dark;
-    const accent = Color(0xFFE97732);
+    const accent = Color(0xFFEEEEEE);
     final scheme = ColorScheme.fromSeed(
       seedColor: accent,
       brightness: brightness,
-      primary: dark ? const Color(0xFFFF9857) : accent,
-      surface: dark ? const Color(0xFF1B1D20) : Colors.white,
+      primary: dark ? const Color(0xFFF0F0F0) : const Color(0xFF171717),
+      onPrimary: dark ? const Color(0xFF101114) : Colors.white,
+      surface: dark ? const Color(0xFF181A1E) : Colors.white,
     ).copyWith(
-      onSurface: dark ? const Color(0xFFF4F2EE) : const Color(0xFF20201E),
-      onSurfaceVariant: dark ? const Color(0xFFA9A7A2) : const Color(0xFF77736D),
-      outline: dark ? const Color(0xFF383A3D) : const Color(0xFFE6E2DC),
-      surfaceContainerHighest: dark ? const Color(0xFF292B2F) : const Color(0xFFF0EEEA),
+      onSurface: dark ? const Color(0xFFF5F5F5) : const Color(0xFF20201E),
+      onSurfaceVariant: dark ? const Color(0xFFAAAEB5) : const Color(0xFF77736D),
+      outline: dark ? const Color(0xFF303238) : const Color(0xFFE6E2DC),
+      surfaceContainerHighest: dark ? const Color(0xFF22252A) : const Color(0xFFF0EEEA),
     );
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: dark ? const Color(0xFF111214) : const Color(0xFFF7F6F2),
-      canvasColor: dark ? const Color(0xFF111214) : const Color(0xFFF7F6F2),
+      scaffoldBackgroundColor: dark ? const Color(0xFF0B0C0F) : const Color(0xFFF7F6F2),
+      canvasColor: dark ? const Color(0xFF0B0C0F) : const Color(0xFFF7F6F2),
       dividerColor: scheme.outline,
       splashFactory: InkSparkle.splashFactory,
       textTheme: TextTheme(
@@ -162,12 +163,12 @@ class FluxMusicApp extends StatelessWidget {
         bodyMedium: TextStyle(fontSize: 14, color: scheme.onSurfaceVariant),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: dark ? const Color(0xFF111214) : const Color(0xFFF7F6F2),
+        backgroundColor: dark ? const Color(0xFF0B0C0F) : const Color(0xFFF7F6F2),
         foregroundColor: scheme.onSurface,
         surfaceTintColor: Colors.transparent,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: dark ? const Color(0xFF111214) : Colors.white,
+        backgroundColor: dark ? const Color(0xFF0B0C0F) : Colors.white,
         indicatorColor: scheme.primary.withValues(alpha: .13),
         labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>((states) => TextStyle(
           fontSize: 10,
@@ -177,11 +178,11 @@ class FluxMusicApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceContainerHighest.withValues(alpha: dark ? .72 : .8),
+        fillColor: scheme.surfaceContainerHighest,
         hintStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: scheme.outline)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: scheme.outline)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: scheme.primary, width: 1.4)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: scheme.primary, width: 1.2)),
       ),
       cardTheme: CardThemeData(color: scheme.surface, elevation: 0, margin: EdgeInsets.zero),
       chipTheme: ChipThemeData(
@@ -193,7 +194,7 @@ class FluxMusicApp extends StatelessWidget {
       ),
       sliderTheme: SliderThemeData(activeTrackColor: scheme.primary, thumbColor: scheme.primary, inactiveTrackColor: scheme.outline),
       switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? Colors.white : scheme.onSurfaceVariant),
+        thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? Colors.black : scheme.onSurfaceVariant),
         trackColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? scheme.primary : scheme.surfaceContainerHighest),
       ),
       bottomSheetTheme: BottomSheetThemeData(backgroundColor: scheme.surface, modalBackgroundColor: scheme.surface),
@@ -747,7 +748,7 @@ class _MusicHomeState extends State<MusicHome> {
         Row(children: <Widget>[
           IconButton(
             tooltip: 'Back to Library',
-            onPressed: () => setState(() => _libraryFilter = 0),
+            onPressed: () => setState(() { _tab = 2; _libraryFilter = 0; }),
             style: IconButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.surface,
               foregroundColor: Theme.of(context).colorScheme.onSurface,
@@ -1095,7 +1096,11 @@ class _MusicHomeState extends State<MusicHome> {
                           ? _discover()
                           : _tab == 1
                               ? _searchPage()
-                              : _libraryPage(),
+                              : _tab == 2
+                                  ? _libraryPage()
+                                  : _tab == 3
+                                      ? _playlistsPage()
+                                      : _settingsPage(),
                     ),
                   ),
                 ),
@@ -1118,6 +1123,8 @@ class _MusicHomeState extends State<MusicHome> {
                       NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'Home'),
                       NavigationDestination(icon: Icon(Icons.search_rounded), selectedIcon: Icon(Icons.search_rounded), label: 'Search'),
                       NavigationDestination(icon: Icon(Icons.library_music_outlined), selectedIcon: Icon(Icons.library_music_rounded), label: 'Library'),
+                      NavigationDestination(icon: Icon(Icons.queue_music_rounded), selectedIcon: Icon(Icons.queue_music_rounded), label: 'Playlists'),
+                      NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings_rounded), label: 'Settings'),
                     ],
                   ),
                 ),
@@ -1161,61 +1168,87 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
+  Widget _settingsPage() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      children: <Widget>[
+        Text('Settings', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8)),
+        const SizedBox(height: 5),
+        Text('Make FluxMusic feel right for you.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
+        const SizedBox(height: 22),
+        Text('APPEARANCE', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+        const SizedBox(height: 9),
+        ValueListenableBuilder<ThemeMode>(
+          valueListenable: fluxThemeMode,
+          builder: (context, mode, _) => _settingsTile(
+            icon: mode == ThemeMode.dark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+            title: 'Dark appearance',
+            subtitle: mode == ThemeMode.dark ? 'Enabled · easier on the eyes' : 'Disabled · switch back to dark',
+            trailing: Switch.adaptive(value: mode == ThemeMode.dark, onChanged: (value) => unawaited(_saveThemeMode(value))),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Text('PLAYBACK', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+        const SizedBox(height: 9),
+        _settingsTile(icon: Icons.graphic_eq_rounded, title: 'Playback & sound', subtitle: 'Quality, normalization, limiter and bass', onTap: _openAudioEnhancements),
+        const SizedBox(height: 20),
+        Text('YOUR MUSIC', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.4)),
+        const SizedBox(height: 9),
+        _settingsTile(icon: Icons.language_rounded, title: 'Catalogue & languages', subtitle: _randomCatalogue ? 'Mixed catalogue' : '${_selectedLanguages.length} languages selected', onTap: _editPersonalization),
+        _settingsTile(icon: Icons.notifications_none_rounded, title: 'Playback notifications', subtitle: 'Lock-screen and notification controls', onTap: () => unawaited(_requestNotificationPermissionInContext())),
+        const SizedBox(height: 26),
+        Center(child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
+          SizedBox(width: 22, height: 22, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
+          const SizedBox(width: 8),
+          Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+        ])),
+      ],
+    );
+  }
+
+  Widget _settingsTile({required IconData icon, required String title, required String subtitle, Widget? trailing, VoidCallback? onTap}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 9),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: Theme.of(context).colorScheme.outline),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 4),
+        leading: Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: Theme.of(context).colorScheme.onSurface, size: 21),
+        ),
+        title: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+        subtitle: Text(subtitle, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        trailing: trailing ?? Icon(Icons.chevron_right_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        onTap: onTap,
+      ),
+    );
+  }
+
   Widget _topBar() {
     if (_tab != 0) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 7, 20, 4),
       child: SizedBox(
-        height: 46,
+        height: 48,
         child: Row(children: <Widget>[
-          Container(
-            width: 46,
-            height: 46,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: <Color>[Color(0xFF38251A), Theme.of(context).colorScheme.surface],
-              ),
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: const Color(0xFF5A3825)),
-              boxShadow: const <BoxShadow>[
-                BoxShadow(color: Color(0x263F210F), blurRadius: 14, offset: Offset(0, 4)),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: SvgPicture.asset('assets/brand/fluxmusic.svg', fit: BoxFit.contain),
-            ),
-          ),
-          const SizedBox(width: 11),
-          Text('FluxMusic', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.65, color: Theme.of(context).colorScheme.onSurface)),
-          const Spacer(),
-          Tooltip(
-            message: 'Personalize catalogue',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(22),
-              onTap: _editPersonalization,
-              child: Container(
-                width: 36, height: 36, alignment: Alignment.center,
-                decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.outline)),
-                child: Icon(Icons.language_rounded, color: _mint, size: 19),
-              ),
-            ),
-          ),
+          Icon(Icons.music_note_rounded, size: 28, color: Theme.of(context).colorScheme.onSurface),
           const SizedBox(width: 7),
-          Tooltip(
-            message: 'Settings',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(22),
-              onTap: _openSettings,
-              child: Container(
-                width: 36, height: 36, alignment: Alignment.center,
-                decoration: BoxDecoration(color: Theme.of(context).colorScheme.surface, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.outline)),
-                child: Icon(Icons.settings_rounded, color: _mint, size: 19),
-              ),
-            ),
+          Text('FluxMusic', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface)),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Playback notifications',
+            onPressed: () => unawaited(_requestNotificationPermissionInContext()),
+            icon: Icon(Icons.notifications_none_rounded, size: 23, color: Theme.of(context).colorScheme.onSurface),
+          ),
+          IconButton(
+            tooltip: 'Profile and settings',
+            onPressed: () => setState(() => _tab = 4),
+            icon: Icon(Icons.account_circle_outlined, size: 24, color: Theme.of(context).colorScheme.onSurface),
           ),
         ]),
       ),
@@ -1224,40 +1257,31 @@ class _MusicHomeState extends State<MusicHome> {
 
   Widget _discover() {
     final recent = _recent.take(10).toList();
-    final personalized = CataloguePreferences.isPersonalized(
-      randomized: _randomCatalogue,
-      languages: _selectedLanguages,
-    );
+    final languages = _selectedLanguages.isNotEmpty
+        ? _selectedLanguages.take(6).toList()
+        : <String>['Hindi', 'Bengali', 'English', 'Tamil', 'Telugu', 'Punjabi'];
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
       children: <Widget>[
         const SizedBox(height: 5),
-        Text(
-          _homeGreeting(),
-          style: TextStyle(fontSize: 29, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.1, color: Theme.of(context).colorScheme.onSurface),
-        ),
+        Text(_homeGreeting(), style: TextStyle(fontSize: 29, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.1, color: Theme.of(context).colorScheme.onSurface)),
         const SizedBox(height: 5),
-        Text(
-          'What do you want to listen to today?',
-          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
+        Text('What do you want to listen to today?', style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant)),
         const SizedBox(height: 17),
         _searchBox(hint: 'Search songs, artists, albums...', onSubmitted: _search),
         const SizedBox(height: 12),
         SizedBox(
-          height: 38,
+          height: 36,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: <Widget>[
-              for (final language in (_selectedLanguages.isNotEmpty
-                  ? _selectedLanguages.take(6)
-                  : <String>{'Hindi', 'Bengali', 'English', 'Tamil', 'Telugu', 'Punjabi'}))
+              for (final language in languages)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ActionChip(
                     label: Text(language),
                     onPressed: () => _search(CataloguePreferences.queryFor(language)),
-                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                     side: BorderSide(color: Theme.of(context).colorScheme.outline),
                     labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11, fontWeight: FontWeight.w700),
                   ),
@@ -1267,125 +1291,70 @@ class _MusicHomeState extends State<MusicHome> {
         ),
         const SizedBox(height: 14),
         _featuredMixCard(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 23),
         Row(children: <Widget>[
-          Expanded(child: Text('Recently played', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4))),
-          if (recent.isNotEmpty)
-            TextButton(onPressed: () => setState(() { _tab = 2; _libraryFilter = 1; }), style: TextButton.styleFrom(foregroundColor: _mint), child: Text('See all', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+          Expanded(child: Text('Recently played', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -.4))),
+          TextButton(
+            onPressed: () => setState(() { _tab = 2; _libraryFilter = 1; }),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant, visualDensity: VisualDensity.compact),
+            child: Text('View all', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
         ]),
-        const SizedBox(height: 10),
+        const SizedBox(height: 9),
         SizedBox(
-          height: 150,
+          height: 145,
           child: recent.isNotEmpty
               ? ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: recent.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  separatorBuilder: (_, __) => const SizedBox(width: 11),
                   itemBuilder: (_, index) => _recentCard(recent[index], index),
                 )
               : ListView(
                   scrollDirection: Axis.horizontal,
                   children: <Widget>[
                     _starterArtCard('Lo-fi sunset', 'Focus & unwind', 0, 'lofi beats focus'),
-                    const SizedBox(width: 12),
-                    _starterArtCard('Anime moments', 'Openings & OSTs', 1, 'anime openings soundtrack'),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 11),
+                    _starterArtCard('Anime OSTs', 'Openings & scores', 1, 'anime openings soundtrack'),
+                    const SizedBox(width: 11),
                     _starterArtCard('Night drive', 'Chill & ambient', 2, 'night drive chill music'),
                   ],
                 ),
         ),
-        if (personalized) ...<Widget>[
-          Text('Your languages', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 112,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _selectedLanguages.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
-              itemBuilder: (_, index) {
-                final language = _selectedLanguages.elementAt(index);
-                return SizedBox(
-                  width: 154,
-                  child: _catalogueTile(
-                    '$language music',
-                    'Personalized picks',
-                    Theme.of(context).colorScheme.surfaceContainerHighest,
-                    Icons.language_rounded,
-                    CataloguePreferences.queryFor(language),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 22),
-        ],
-        const SizedBox(height: 25),
+        const SizedBox(height: 22),
         Row(children: <Widget>[
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            Text('For you', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
-          ])),
-          TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: Text('Explore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+          Expanded(child: Text('Mood & Focus', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -.4))),
+          TextButton(
+            onPressed: () => setState(() => _tab = 1),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant, visualDensity: VisualDensity.compact),
+            child: Text('Explore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
         ]),
-        const SizedBox(height: 11),
+        const SizedBox(height: 10),
         SizedBox(
-          height: 142,
+          height: 82,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: <Widget>[
-              for (var index = 0; index < _discoveryMoods.length; index++) ...<Widget>[
-                _moodCard(_discoveryMoods[index], index),
-                if (index < _discoveryMoods.length - 1) const SizedBox(width: 12),
-              ],
+              _moodCard('Indie picks', 0),
+              const SizedBox(width: 9),
+              _moodCard('Lo-fi focus', 1),
+              const SizedBox(width: 9),
+              _moodCard('Night drive', 2),
             ],
           ),
         ),
-        const SizedBox(height: 24),
-        Row(children: <Widget>[
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            Text('Categories', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4)),
-          ])),
-          TextButton(onPressed: () => setState(() => _tab = 1), style: TextButton.styleFrom(foregroundColor: _mint), child: Text('Browse all ↗', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
-        ]),
-        const SizedBox(height: 10),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 2.05,
-          children: <Widget>[
-            _catalogueTile('Anime & OST', 'Openings and scores', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.auto_awesome_rounded, 'anime openings'),
-            _catalogueTile('Lo-fi & Focus', 'Stay in your zone', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.headphones_rounded, 'lofi beats focus'),
-            _catalogueTile('Indian Hits', 'Hindi • Bengali • more', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.graphic_eq_rounded, 'Indian hit songs Hindi Bengali'),
-            _catalogueTile('Indie Finds', 'Beyond the mainstream', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.album_rounded, 'indie music'),
-            _catalogueTile('Chill & Ambient', 'Slow down a little', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.nightlight_round, 'chill ambient music'),
-            _catalogueTile('Workout Energy', 'Turn it up', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.bolt_rounded, 'workout upbeat music'),
-          ],
-        ),
-        const SizedBox(height: 18),
-        if (_recent.isNotEmpty) ...<Widget>[
-          Text('Your listening history', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          ..._recent.take(4).toList().asMap().entries.map((entry) => _recentTrackRow(entry.value, entry.key)),
-        ],
         if (_error != null) Padding(
-          padding: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.only(top: 14),
           child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
         ),
-        const SizedBox(height: 28),
-        Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              SizedBox(width: 24, height: 24, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
-              const SizedBox(width: 8),
-              Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
+        Center(child: Row(mainAxisSize: MainAxisSize.min, children: <Widget>[
+          SizedBox(width: 22, height: 22, child: SvgPicture.asset('assets/brand/crazestudio-mark.svg', fit: BoxFit.contain)),
+          const SizedBox(width: 8),
+          Text('CrazeStudio', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: .5)),
+        ])),
+        const SizedBox(height: 6),
       ],
     );
   }
@@ -1414,7 +1383,7 @@ class _MusicHomeState extends State<MusicHome> {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: dark
-                  ? const <Color>[Color(0xFF49301F), Color(0xFF242326), Color(0xFF17191C)]
+                  ? const <Color>[Color(0xFF34363B), Color(0xFF202226), Color(0xFF141518)]
                   : const <Color>[Color(0xFFDAA77E), Color(0xFFB87550), Color(0xFF67483D)],
             ),
           ),
@@ -1518,58 +1487,30 @@ class _MusicHomeState extends State<MusicHome> {
   } 
 
   Widget _moodCard(String mood, int index) {
-    const palettes = <List<Color>>[
-      <Color>[Color(0xFF3A281D), Color(0xFF211915)],
-      <Color>[Color(0xFF30271F), Color(0xFF1C1916)],
-      <Color>[Color(0xFF3A2420), Color(0xFF211716)],
-      <Color>[Color(0xFF28242A), Color(0xFF18171B)],
-      <Color>[Color(0xFF34231E), Color(0xFF1D1715)],
-      <Color>[Color(0xFF30291F), Color(0xFF1B1915)],
-    ];
-    const icons = <IconData>[
-      Icons.local_fire_department_rounded,
-      Icons.bolt_rounded,
-      Icons.spa_rounded,
-      Icons.headphones_rounded,
-      Icons.mic_external_on_rounded,
-      Icons.nightlight_round,
-    ];
-    final colors = palettes[index % palettes.length];
+    const icons = <IconData>[Icons.headphones_rounded, Icons.spa_rounded, Icons.nightlight_round];
+    const subtitles = <String>['Beyond the mainstream', 'Stay in your zone', 'Easy late-night listening'];
     final icon = icons[index % icons.length];
+    final query = mood == 'Indie picks' ? 'indie music' : mood == 'Lo-fi focus' ? 'lofi beats focus' : 'night drive chill music';
     return SizedBox(
-      width: 154,
+      width: 128,
       child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(18),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(17),
         child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () => _search(mood == 'Trending now' ? 'trending music ${DateTime.now().year}' : mood),
-          child: Ink(
+          borderRadius: BorderRadius.circular(17),
+          onTap: () => _search(query),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: colors, begin: Alignment.topLeft, end: Alignment.bottomRight),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: colors.last),
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(color: Theme.of(context).colorScheme.outline),
             ),
-            child: Stack(children: <Widget>[
-              Positioned(right: -13, top: -19, child: Icon(icon, size: 95, color: Colors.white.withValues(alpha: .075))),
-              Padding(
-                padding: const EdgeInsets.all(13),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                  Container(
-                    width: 34, height: 34,
-                    decoration: BoxDecoration(color: _mint, borderRadius: BorderRadius.circular(12)),
-                    child: Icon(icon, color: const Color(0xFF21160F), size: 19),
-                  ),
-                  const Spacer(),
-                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 4),
-                  Row(children: <Widget>[
-                    Text('PLAY MIX', style: TextStyle(fontSize: 8, color: Colors.white.withValues(alpha: .72), fontWeight: FontWeight.w800, letterSpacing: 1.05)),
-                    const Spacer(),
-                    Icon(Icons.arrow_outward_rounded, color: Colors.white.withValues(alpha: .82), size: 13),
-                  ]),
-                ]),
-              ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+              Icon(icon, size: 19, color: Theme.of(context).colorScheme.onSurface),
+              const Spacer(),
+              Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(subtitles[index % subtitles.length], maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 8.5)),
             ]),
           ),
         ),
@@ -1623,123 +1564,109 @@ class _MusicHomeState extends State<MusicHome> {
   }
 
   Widget _searchPage() {
+    final languages = _selectedLanguages.isNotEmpty ? _selectedLanguages.take(6).toList() : <String>['Hindi', 'Bengali', 'English', 'Tamil', 'Telugu', 'Punjabi'];
+    const suggestions = <String>['Satranga', 'Heeriye', 'Kesariya', 'Kaise Hua'];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-        Text('Search', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, letterSpacing: -.7, color: Theme.of(context).colorScheme.onSurface)),
-        const SizedBox(height: 14),
-        Wrap(spacing: 8, children: <Widget>[
-          ChoiceChip(
-            label: Text('Songs'),
-            selected: !_searchPlaylistsMode,
-            onSelected: (_) => setState(() {
-              _searchPlaylistsMode = false;
-              _lastQuery = '';
-              _searching = false;
-              _error = null;
-            }),
-          ),
-          ChoiceChip(
-            label: Text('Playlists'),
-            selected: _searchPlaylistsMode,
-            onSelected: (_) => setState(() {
-              _searchPlaylistsMode = true;
-              _lastQuery = '';
-              _searching = false;
-              _error = null;
-            }),
-          ),
-        ]),
-        const SizedBox(height: 12),
+        Text('Search', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, letterSpacing: -.8, color: Theme.of(context).colorScheme.onSurface)),
+        const SizedBox(height: 13),
         _searchBox(
-          hint: _searchPlaylistsMode ? 'Search YouTube Music playlists' : 'Search songs, artists, albums',
+          hint: _searchPlaylistsMode ? 'Search playlists...' : 'Search songs, artists, albums...',
           onSubmitted: _searchPlaylistsMode ? _searchYouTubePlaylists : _search,
         ),
-        const SizedBox(height: 14),
-        if (_lastQuery.isEmpty)
-          Expanded(
-            child: _searchPlaylistsMode
-                ? const _EmptyState(
-                    icon: Icons.queue_music_rounded,
-                    title: 'Find a playlist',
-                    subtitle: 'Search YouTube Music, then open a result to load its track list.',
-                  )
-                : ListView(padding: const EdgeInsets.only(bottom: 16), children: <Widget>[
-                    Text('Browse categories', style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.3)),
-                    const SizedBox(height: 10),
-                    Wrap(spacing: 10, runSpacing: 10, children: <Widget>[
-                      _genreTile('Electronic', const Color(0xFF25202B), 'electronic music'),
-                      _genreTile('Chill', const Color(0xFF202820), 'chill music'),
-                      _genreTile('Indie', const Color(0xFF2A211F), 'indie music'),
-                      _genreTile('Focus', const Color(0xFF29291E), 'focus music'),
-                      _genreTile('Hip-hop', const Color(0xFF2A2026), 'hip hop'),
-                      _genreTile('Ambient', const Color(0xFF20262B), 'ambient music'),
-                    ]),
-                    const SizedBox(height: 22),
-                    Row(children: <Widget>[
-                      Expanded(child: Text(_searchHistory.isEmpty ? 'Try a search' : 'Recent searches', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-                      if (_searchHistory.isNotEmpty) TextButton(onPressed: _clearSearchHistory, style: TextButton.styleFrom(foregroundColor: _mint, visualDensity: VisualDensity.compact), child: Text('Clear', style: TextStyle(fontSize: 11))),
-                    ]),
-                    const SizedBox(height: 4),
-                    if (_searchHistory.isNotEmpty)
-                      ..._searchHistory.take(5).map((query) => ListTile(
-                        contentPadding: EdgeInsets.zero, dense: true, leading: Icon(Icons.history_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 19),
-                        title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13)),
-                        trailing: Icon(Icons.north_west_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16), onTap: () => _search(query),
-                      ))
-                    else
-                      ...<String>['After Dark', 'Lo-fi beats', 'Anime openings'].map((query) => ListTile(
-                        contentPadding: EdgeInsets.zero, dense: true, leading: Icon(Icons.search_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 18),
-                        title: Text(query, style: TextStyle(fontSize: 13)), trailing: Icon(Icons.north_west_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16),
-                        onTap: () => _search(query),
-                      )),
-                  ]),
-          )
-        else
-          Expanded(
-            child: _searching
-                ? const Center(child: CircularProgressIndicator(color: _mint))
-                : _searchPlaylistsMode
-                    ? _onlinePlaylistResults()
-                    : _error != null && _results.isEmpty
-                        ? _ErrorState(message: _error!, onRetry: () => _search(_lastQuery))
-                        : _results.isEmpty
-                            ? const _EmptyState(icon: Icons.search_rounded, title: 'No songs found', subtitle: 'Try another song, artist, or search term.')
-                            : ListView.builder(
-                                padding: const EdgeInsets.only(bottom: 14),
-                                itemCount: _results.length + (_loadedOnlinePlaylistTitle == null ? 0 : 1),
-                                itemBuilder: (_, index) {
-                                  if (_loadedOnlinePlaylistTitle != null && index == 0) {
-                                    return Card(
-                                      color: Theme.of(context).colorScheme.surface,
-                                      margin: const EdgeInsets.only(bottom: 10),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(13),
-                                        child: Row(children: <Widget>[
-                                          Icon(Icons.cloud_done_rounded, color: _mint, size: 25),
-                                          const SizedBox(width: 10),
-                                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-                                            Text('YouTube Music playlist loaded', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                                            Text(_loadedOnlinePlaylistTitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
-                                          ])),
-                                          const SizedBox(width: 5),
-                                          IconButton(
-                                            tooltip: 'Save tracklist as a local playlist',
-                                            onPressed: () => _createPlaylist(
-                                              initialName: _loadedOnlinePlaylistTitle,
-                                              seedTracks: _results,
-                                            ),
-                                            icon: Icon(Icons.playlist_add_rounded, color: _mint),
-                                          ),
-                                        ]),
-                                      ),
-                                    );
-                                  }
-                                  final trackIndex = index - (_loadedOnlinePlaylistTitle == null ? 0 : 1);
-                                  return _trackTile(_results[trackIndex], trackIndex, _results);
-                                },
+        const SizedBox(height: 9),
+        Row(children: <Widget>[
+          ChoiceChip(label: Text('Songs'), selected: !_searchPlaylistsMode, onSelected: (_) => setState(() { _searchPlaylistsMode = false; _lastQuery = ''; _searching = false; _error = null; })),
+          const SizedBox(width: 7),
+          ChoiceChip(label: Text('Playlists'), selected: _searchPlaylistsMode, onSelected: (_) => setState(() { _searchPlaylistsMode = true; _lastQuery = ''; _searching = false; _error = null; })),
+        ]),
+        const SizedBox(height: 7),
+        Expanded(
+          child: _lastQuery.isEmpty
+              ? _searchPlaylistsMode
+                  ? const _EmptyState(icon: Icons.queue_music_rounded, title: 'Find a playlist', subtitle: 'Search YouTube Music, then open a result to load its track list.')
+                  : ListView(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      children: <Widget>[
+                        Row(children: <Widget>[
+                          Expanded(child: Text('Recent Searches', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+                          if (_searchHistory.isNotEmpty) TextButton(onPressed: _clearSearchHistory, style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant, visualDensity: VisualDensity.compact), child: Text('Clear', style: TextStyle(fontSize: 11))),
+                        ]),
+                        const SizedBox(height: 5),
+                        if (_searchHistory.isEmpty)
+                          ...<String>['Arijit Singh', 'Demon Slayer OST', 'Kesariya'].map((query) => ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: Icon(Icons.history_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 19), title: Text(query, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), trailing: Icon(Icons.north_west_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16), onTap: () => _search(query)))
+                        else
+                          ..._searchHistory.take(6).map((query) => ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: Icon(Icons.history_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 19), title: Text(query, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)), trailing: Icon(Icons.north_west_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 16), onTap: () => _search(query))),
+                        const SizedBox(height: 15),
+                        Text('Explore by Language', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 35,
+                          child: ListView(scrollDirection: Axis.horizontal, children: <Widget>[
+                            for (final language in languages)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ActionChip(
+                                  label: Text(language),
+                                  onPressed: () => _search(CataloguePreferences.queryFor(language)),
+                                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                  side: BorderSide(color: Theme.of(context).colorScheme.outline),
+                                  labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 10, fontWeight: FontWeight.w600),
+                                ),
                               ),
-          ),
+                          ]),
+                        ),
+                        const SizedBox(height: 19),
+                        Text('Popular Right Now', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 5),
+                        ...suggestions.asMap().entries.map((entry) => ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: _DecorativeArt(size: 43, variant: entry.key),
+                          title: Text(entry.value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          subtitle: Text('Tap to discover tracks', style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          trailing: Icon(Icons.more_vert_rounded, size: 19, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                          onTap: () => _search(entry.value),
+                        )),
+                      ],
+                    )
+              : _searching
+                  ? const Center(child: CircularProgressIndicator(color: _mint))
+                  : _searchPlaylistsMode
+                      ? _onlinePlaylistResults()
+                      : _error != null && _results.isEmpty
+                          ? _ErrorState(message: _error!, onRetry: () => _search(_lastQuery))
+                          : _results.isEmpty
+                              ? const _EmptyState(icon: Icons.search_rounded, title: 'No songs found', subtitle: 'Try another song, artist, or search term.')
+                              : ListView.builder(
+                                  padding: const EdgeInsets.only(bottom: 14),
+                                  itemCount: _results.length + (_loadedOnlinePlaylistTitle == null ? 0 : 1),
+                                  itemBuilder: (_, index) {
+                                    if (_loadedOnlinePlaylistTitle != null && index == 0) {
+                                      return Card(
+                                        color: Theme.of(context).colorScheme.surface,
+                                        margin: const EdgeInsets.only(bottom: 10),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(13),
+                                          child: Row(children: <Widget>[
+                                            Icon(Icons.cloud_done_rounded, color: _mint, size: 25),
+                                            const SizedBox(width: 10),
+                                            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+                                              Text('YouTube Music playlist loaded', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                                              Text(_loadedOnlinePlaylistTitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
+                                            ])),
+                                            const SizedBox(width: 5),
+                                            IconButton(tooltip: 'Save tracklist as a local playlist', onPressed: () => _createPlaylist(initialName: _loadedOnlinePlaylistTitle, seedTracks: _results), icon: Icon(Icons.playlist_add_rounded, color: _mint)),
+                                          ]),
+                                        ),
+                                      );
+                                    }
+                                    final trackIndex = index - (_loadedOnlinePlaylistTitle == null ? 0 : 1);
+                                    return _trackTile(_results[trackIndex], trackIndex, _results);
+                                  },
+                                ),
+        ),
       ]),
     );
   }
@@ -2653,11 +2580,11 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                   Container(
                     width: 62,
                     height: 62,
-                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: _mint),
                     child: IconButton(
                       tooltip: playing ? 'Pause' : 'Play',
                       onPressed: () => playing ? widget.handler.pause() : widget.handler.play(),
-                      icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 34),
+                      icon: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: const Color(0xFF101114), size: 34),
                     ),
                   ),
                   IconButton(onPressed: () => widget.handler.skipToNext(), icon: Icon(Icons.skip_next_rounded, size: 29)),
@@ -3197,7 +3124,7 @@ class _DecorativeArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bases = <Color>[const Color(0xFF242126), const Color(0xFF29211F), const Color(0xFF222820), const Color(0xFF20252B)];
-    final accents = <Color>[const Color(0xFFB9796A), const Color(0xFFFF8A35), const Color(0xFF6C927E), const Color(0xFF6C83A1)];
+    final accents = <Color>[const Color(0xFF8D929B), const Color(0xFF737982), const Color(0xFF9BA0A8), const Color(0xFF626873)];
     final base = bases[variant % bases.length];
     final accent = accents[variant % accents.length];
     return Container(
