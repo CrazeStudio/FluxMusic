@@ -38,10 +38,10 @@ object YtMusicCatalog {
     // NewPipeExtractor v0.27.1 resolves YouTube streams with the VISIONOS player client.
     // Keep this identity when probing and playing those signed stream URLs.
     const val VISIONOS_USER_AGENT =
-        "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; IN)"
+        "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; GB)"
 
     // Changing this tag invalidates persisted stream URLs from older resolver versions.
-    const val STREAM_CACHE_TAG = "|flux-resolver-v2"
+    const val STREAM_CACHE_TAG = "|flux-resolver-v3"
     private const val SEARCH_ENDPOINT =
         "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
     private const val CLIENT_VERSION = "1.20261116.01.00"
@@ -79,7 +79,7 @@ object YtMusicCatalog {
     private var persistentInvalidator: ((videoId: String) -> Unit)? = null
 
     private val prefetchExecutor: ExecutorService = Executors.newFixedThreadPool(2)
-    private val playbackRequestNumber = AtomicLong(1L)
+    private val playbackRequestNumber = AtomicLong(0L)
 
     /**
      * YouTube video playback endpoints require a request-number parameter on each
@@ -314,22 +314,19 @@ object YtMusicCatalog {
             val service = NewPipe.getService("YouTube")
             val extractor = service.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
             extractor.fetchPage()
-            // YouTube normally exposes audio-only formats as DASH, not progressive HTTP.
-            // Excluding DASH here caused the primary resolver to reject every audio-only stream.
+            // Only select direct progressive URLs here. DASH/OTF entries need a generated
+            // YouTube DASH manifest and must not be handed to the progressive player pipeline.
             val playableAudio = extractor.audioStreams
                 .filter {
                     it.isUrl &&
                         !it.content.isNullOrBlank() &&
-                        it.deliveryMethod in setOf(
-                            DeliveryMethod.DASH,
-                            DeliveryMethod.PROGRESSIVE_HTTP
-                        ) &&
+                        it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
                         !it.content.contains(".m3u8", ignoreCase = true)
                 }
             Log.i(
                 "FluxMusicPlayback",
                 "NewPipe returned ${extractor.audioStreams.size} audio streams; " +
-                    "${playableAudio.size} direct DASH/progressive candidates for $videoId"
+                    "${playableAudio.size} direct progressive candidates for $videoId"
             )
             if (playableAudio.isEmpty()) return null
             val ordered = orderNewPipeCandidates(playableAudio, quality)
