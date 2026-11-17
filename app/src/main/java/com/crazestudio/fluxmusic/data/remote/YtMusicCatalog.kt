@@ -40,7 +40,7 @@ object YtMusicCatalog {
         "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; GB)"
 
     // Changing this tag invalidates persisted stream URLs from older resolver versions.
-    const val STREAM_CACHE_TAG = "|flux-resolver-v3"
+    const val STREAM_CACHE_TAG = "|flux-resolver-v4"
     private const val SEARCH_ENDPOINT =
         "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
     private const val CLIENT_VERSION = "1.20261116.01.00"
@@ -310,42 +310,22 @@ object YtMusicCatalog {
     private fun resolveViaNewPipe(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
         return try {
             initializeExtractor()
-            val service = NewPipe.getService("YouTube")
-            val extractor = service.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
+            val extractor = NewPipe.getService("YouTube")
+                .getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
             extractor.fetchPage()
-            // YouTube's audio-only formats are commonly exposed as DASH adaptive
-            // streams. NewPipe gives us their direct, signed media URLs (isUrl=true);
-            // those URLs can be read by Media3 as a single audio resource. Filtering
-            // only PROGRESSIVE_HTTP silently discarded the normal YouTube audio formats.
-            // Keep direct HTTP media URLs, but reject HLS manifests and non-URL entries.
-            val playableAudio = extractor.audioStreams
-                .filter {
-                    it.isUrl &&
-                        !it.content.isNullOrBlank() &&
-                        !it.content.contains(".m3u8", ignoreCase = true) &&
-                        !it.content.startsWith("manifest", ignoreCase = true)
-                }
-            Log.i(
-                "FluxMusicPlayback",
-                "NewPipe returned ${extractor.audioStreams.size} audio streams; " +
-                    "${playableAudio.size} direct media URL candidates for $videoId; " +
-                    "deliveryMethods=${extractor.audioStreams.groupingBy { it.deliveryMethod }.eachCount()}"
-            )
-            if (playableAudio.isEmpty()) return null
-            val ordered = orderNewPipeCandidates(playableAudio, quality)
-            for (candidate in ordered.take(4)) {
-                val url = candidate.content ?: continue
-                if (probeStreamPlayable(url, VISIONOS_USER_AGENT, useYoutubePlaybackProtocol = true)) {
-                    return ResolvedAudioStream(
-                        url = url,
-                        userAgent = VISIONOS_USER_AGENT,
-                        source = "newpipe-visionos"
-                    )
-                }
+            val manifestUrl = extractor.dashMpdUrl
+            if (!manifestUrl.startsWith("https://")) {
+                Log.w("FluxMusicPlayback", "No HTTPS DASH manifest returned for $videoId")
+                return null
             }
-            null
+            if (!probeStreamPlayable(manifestUrl, VISIONOS_USER_AGENT)) {
+                Log.w("FluxMusicPlayback", "DASH manifest probe failed for $videoId")
+                return null
+            }
+            Log.i("FluxMusicPlayback", "Using NewPipe DASH manifest for $videoId")
+            ResolvedAudioStream(manifestUrl, VISIONOS_USER_AGENT, "newpipe-dash")
         } catch (e: Exception) {
-            Log.w("FluxMusicPlayback", "NewPipe VISIONOS extraction failed: ${e.message}", e)
+            Log.w("FluxMusicPlayback", "NewPipe DASH extraction failed: ${e.message}", e)
             null
         }
     }
@@ -362,25 +342,11 @@ object YtMusicCatalog {
                 }
                 try {
                     if (conn.responseCode !in 200..299) return@runCatching null
-                    val root = JSONObject(readStream(conn.inputStream))
-                    val audioStreams = root.optJSONArray("audioStreams") ?: return@runCatching null
-                    val candidates = ArrayList<Pair<Int, String>>()
-                    for (i in 0 until audioStreams.length()) {
-                        val item = audioStreams.optJSONObject(i) ?: continue
-                        if (item.optBoolean("videoOnly", false)) continue
-                        val url = item.optString("url", "")
-                        if (url.isBlank() || url.contains(".m3u8", ignoreCase = true)) continue
-                        val rawBitrate = item.optInt("bitrate", 0)
-                        val kbps = if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate
-                        candidates.add(kbps.coerceAtLeast(1) to url)
+                    val manifestUrl = JSONObject(readStream(conn.inputStream)).optString("dash", "")
+                    if (!manifestUrl.startsWith("https://") || !probeStreamPlayable(manifestUrl, USER_AGENT)) {
+                        return@runCatching null
                     }
-                    val ordered = orderRawCandidates(candidates, quality)
-                    for ((_, url) in ordered.take(3)) {
-                        if (probeStreamPlayable(url, USER_AGENT)) {
-                            return@runCatching ResolvedAudioStream(url = url, userAgent = USER_AGENT, source = "piped")
-                        }
-                    }
-                    null
+                    ResolvedAudioStream(manifestUrl, USER_AGENT, "piped-dash")
                 } finally {
                     conn.disconnect()
                 }
@@ -403,28 +369,11 @@ object YtMusicCatalog {
                 }
                 try {
                     if (conn.responseCode !in 200..299) return@runCatching null
-                    val root = JSONObject(readStream(conn.inputStream))
-                    val formats = root.optJSONArray("adaptiveFormats") ?: return@runCatching null
-                    val candidates = ArrayList<Pair<Int, String>>()
-                    for (i in 0 until formats.length()) {
-                        val item = formats.optJSONObject(i) ?: continue
-                        if (!item.optString("type", "").startsWith("audio/", ignoreCase = true)) continue
-                        val url = item.optString("url", "")
-                        if (!url.startsWith("https://", ignoreCase = true)) continue
-                        val rawBitrate = item.optString("bitrate", "0").toIntOrNull() ?: 0
-                        val kbps = if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate
-                        candidates.add(kbps.coerceAtLeast(1) to url)
+                    val manifestUrl = JSONObject(readStream(conn.inputStream)).optString("dashUrl", "")
+                    if (!manifestUrl.startsWith("https://") || !probeStreamPlayable(manifestUrl, USER_AGENT)) {
+                        return@runCatching null
                     }
-                    for ((_, url) in orderRawCandidates(candidates, quality).take(2)) {
-                        if (probeStreamPlayable(url, USER_AGENT)) {
-                            return@runCatching ResolvedAudioStream(
-                                url = url,
-                                userAgent = USER_AGENT,
-                                source = "invidious"
-                            )
-                        }
-                    }
-                    null
+                    ResolvedAudioStream(manifestUrl, USER_AGENT, "invidious-dash")
                 } finally {
                     conn.disconnect()
                 }
