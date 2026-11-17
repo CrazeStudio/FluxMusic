@@ -147,8 +147,8 @@ object YtMusicCatalog {
 
         val conn = (URL(SEARCH_ENDPOINT).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 7000
-            readTimeout = 10000
+            connectTimeout = 5000
+            readTimeout = 7000
             setRequestProperty("User-Agent", USER_AGENT)
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("Origin", "https://music.youtube.com")
@@ -170,11 +170,15 @@ object YtMusicCatalog {
             val parsed = LinkedHashMap<String, Track>()
             collect(JSONObject(json), parsed, languageHint)
             val result = parsed.values.toList()
-            synchronized(searchCache) {
-                searchCache[normalized] = SearchCacheEntry(tracks = result)
-                while (searchCache.size > 80) {
-                    val oldestKey = searchCache.keys.firstOrNull() ?: break
-                    searchCache.remove(oldestKey)
+            // Empty results can be transient when the upstream response changes.
+            // Avoid caching them so a subsequent request can recover immediately.
+            if (result.isNotEmpty()) {
+                synchronized(searchCache) {
+                    searchCache[normalized] = SearchCacheEntry(tracks = result)
+                    while (searchCache.size > 80) {
+                        val oldestKey = searchCache.keys.firstOrNull() ?: break
+                        searchCache.remove(oldestKey)
+                    }
                 }
             }
             result
