@@ -1416,54 +1416,6 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  Widget _catalogueTile(String title, String subtitle, Color color, IconData icon, String query) {
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(17),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(17),
-        onTap: () => _search(query),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(17),
-            border: Border.all(color: Colors.white.withValues(alpha: .07)),
-          ),
-          child: Stack(children: <Widget>[
-            Positioned(right: 8, top: 6, child: Icon(icon, size: 39, color: Theme.of(context).colorScheme.onSurfaceVariant.withValues(alpha: .65))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(11, 9, 5, 9),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.end, children: <Widget>[
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 9)),
-              ]),
-            ),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _recentTrackRow(Track track, int index) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: () => _playList(_recent, index),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(children: <Widget>[
-          _CoverArt(url: track.thumbnailUrl, size: 54, radius: 12),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
-            Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-            const SizedBox(height: 4),
-            Text(track.artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
-          ])),
-          IconButton(tooltip: 'Play track', visualDensity: VisualDensity.compact, onPressed: () => _playList(_recent, index), icon: Icon(Icons.play_arrow_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 22)),
-        ]),
-      ),
-    );
-  } 
-
   Widget _moodCard(String mood, int index) {
     const icons = <IconData>[Icons.headphones_rounded, Icons.spa_rounded, Icons.nightlight_round];
     const subtitles = <String>['Beyond the mainstream', 'Stay in your zone', 'Easy late-night listening'];
@@ -1680,26 +1632,6 @@ class _MusicHomeState extends State<MusicHome> {
           ),
         );
       },
-    );
-  }
-
-  Widget _genreTile(String label, Color color, String query) {
-    final double tileWidth = ((MediaQuery.sizeOf(context).width - 50) / 2).clamp(140.0, 190.0).toDouble();
-    return Material(
-      color: color.withValues(alpha: .8),
-      borderRadius: BorderRadius.circular(17),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(17),
-        onTap: () => _search(query),
-        child: SizedBox(
-          width: tileWidth, height: 98,
-          child: Stack(children: <Widget>[
-            Positioned(right: -8, top: 3, child: Icon(Icons.graphic_eq_rounded, size: 68, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .10))),
-            Positioned(right: 15, top: 12, child: Icon(Icons.album_rounded, size: 31, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .55))),
-            Positioned(left: 13, bottom: 12, child: Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 15, fontWeight: FontWeight.w800))),
-          ]),
-        ),
-      ),
     );
   }
 
