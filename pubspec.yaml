@@ -1,7 +1,7 @@
 name: fluxmusic
 description: A polished Flutter music discovery and streaming app by CrazeStudio.
 publish_to: "none"
-version: 1.5.0+15
+version: 1.6.0+16
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

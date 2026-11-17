@@ -1,6 +1,6 @@
 # FluxMusic
 
-**FluxMusic v1.5** is a dark, animated Flutter music app built by CrazeStudio. It uses `dart_ytmusic_api` to discover tracks and `just_audio` + `audio_service` for playback, background operation, and Android media controls.
+**FluxMusic v1.6** is a Flutter music discovery and streaming app by CrazeStudio. It uses `dart_ytmusic_api` to discover tracks and `just_audio` + `audio_service` for playback, background operation, and Android media controls.
 
 ## Features
 
@@ -9,7 +9,9 @@
 - Android background playback, media notification, lock-screen controls, and headset media buttons
 - Supplied music-note branding in the app and adaptive Android launcher icons
 - Stream resolver retries several YouTube client strategies and reports actionable playback errors
-- Animated dark UI, mood shortcuts, mini-player, rotating artwork, and full player sheet
+- Fresh home discovery layout with greeting, prominent search, language shortcuts, featured mix, and recently played tracks
+- Warm light appearance and coordinated dark appearance, with persistent selection in Settings
+- Theme-aware navigation, library, mini-player, full player, queue, lyrics, and audio settings
 - First-run multi-select language personalization, with a skip option for a randomized mixed catalogue
 - Language-focused music discovery shortcuts for Hindi, Bengali, English, Tamil, Telugu, Punjabi, and more
 - Device-local playlists: create collections, add search results, and play a playlist
@@ -54,11 +56,11 @@ You can also open **Actions → Build FluxMusic APK** on GitHub after a push. Do
 
 ## Project layout
 
-- `lib/main.dart` — first-run personalization, catalogue, song/playlist search, local playlists, favourites, recent history, audio settings
+- `lib/main.dart` — first-run personalization, catalogue, song/playlist search, local playlists, favourites, recent history, audio settings, and adaptive theme
 - `lib/models/track.dart` — normalizes YouTube Music search results
 - `lib/models/catalogue_preferences.dart` — language choices, search phrases, and personalization mode
 - `lib/services/flux_audio_handler.dart` — queue, audio resolution, quality preference, playback state, media session
 - `test/catalogue_preferences_test.dart` — personalization model tests
-- `CHANGELOG.md` — v1.5 changes and limitations
+- `CHANGELOG.md` — release history and limitations
 - `tool/patch_android.py` — adds required Android permissions and audio-service declarations to a Flutter-generated Android project
 - `.github/workflows/build-apk.yml` — builds and uploads the APK artifact
