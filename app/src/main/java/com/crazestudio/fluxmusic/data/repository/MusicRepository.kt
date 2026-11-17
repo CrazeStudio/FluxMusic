@@ -44,11 +44,15 @@ class MusicRepository(
                 runCatching {
                     runBlocking {
                         streamCacheDao.getValidStream(videoId, quality.name)?.let { entity ->
-                            ResolvedAudioStream(
-                                url = entity.streamUrl,
-                                userAgent = entity.userAgent.ifBlank { YtMusicCatalog.USER_AGENT },
-                                source = "cache"
-                            )
+                            entity.userAgent
+                                .takeIf { it.endsWith(YtMusicCatalog.STREAM_CACHE_TAG) }
+                                ?.let { taggedUserAgent ->
+                                    ResolvedAudioStream(
+                                        url = entity.streamUrl,
+                                        userAgent = taggedUserAgent.removeSuffix(YtMusicCatalog.STREAM_CACHE_TAG),
+                                        source = "cache"
+                                    )
+                                }
                         }
                     }
                 }.getOrNull()
@@ -61,7 +65,7 @@ class MusicRepository(
                                 videoId = videoId,
                                 quality = quality.name,
                                 streamUrl = stream.url,
-                                userAgent = stream.userAgent,
+                                userAgent = stream.userAgent + YtMusicCatalog.STREAM_CACHE_TAG,
                                 expiresAt = expiresAt
                             )
                         )
