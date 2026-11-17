@@ -292,15 +292,25 @@ object YtMusicCatalog {
             val service = NewPipe.getService("YouTube")
             val extractor = service.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
             extractor.fetchPage()
-            val progressive = extractor.audioStreams
+            // YouTube normally exposes audio-only formats as DASH, not progressive HTTP.
+            // Excluding DASH here caused the primary resolver to reject every audio-only stream.
+            val playableAudio = extractor.audioStreams
                 .filter {
                     it.isUrl &&
                         !it.content.isNullOrBlank() &&
-                        it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP &&
+                        it.deliveryMethod in setOf(
+                            DeliveryMethod.DASH,
+                            DeliveryMethod.PROGRESSIVE_HTTP
+                        ) &&
                         !it.content.contains(".m3u8", ignoreCase = true)
                 }
-            if (progressive.isEmpty()) return null
-            val ordered = orderNewPipeCandidates(progressive, quality)
+            Log.i(
+                "FluxMusicPlayback",
+                "NewPipe returned ${extractor.audioStreams.size} audio streams; " +
+                    "${playableAudio.size} direct DASH/progressive candidates for $videoId"
+            )
+            if (playableAudio.isEmpty()) return null
+            val ordered = orderNewPipeCandidates(playableAudio, quality)
             for (candidate in ordered.take(4)) {
                 val url = candidate.content ?: continue
                 if (probeStreamPlayable(url, VISIONOS_USER_AGENT)) {
