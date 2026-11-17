@@ -3,7 +3,7 @@ package com.crazestudio.fluxmusic;
 import android.net.Uri;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.schabi.newpipe.NewPipe;
+import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.StreamingService;
 import org.schabi.newpipe.extractor.downloader.Downloader;
 import org.schabi.newpipe.extractor.downloader.Request;
