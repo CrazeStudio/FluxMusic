@@ -1146,28 +1146,6 @@ class _MusicHomeState extends State<MusicHome> {
     );
   }
 
-  void _openSettings() {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      useSafeArea: true,
-      builder: (sheetContext) => AppSettingsSheet(
-        languageSummary: _randomCatalogue
-            ? 'Mixed catalogue'
-            : '${_selectedLanguages.length} languages selected',
-        onOpenAudio: () {
-          Navigator.of(sheetContext).pop();
-          _openAudioEnhancements();
-        },
-        onEditCatalogue: () {
-          Navigator.of(sheetContext).pop();
-          _editPersonalization();
-        },
-      ),
-    );
-  }
-
   Widget _settingsPage() {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -1952,7 +1930,7 @@ class _MusicHomeState extends State<MusicHome> {
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 5, 12, 8),
           child: Material(
-            color: const Color(0xFF1C1C1C),
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(17),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
