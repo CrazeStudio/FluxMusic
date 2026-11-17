@@ -31,6 +31,14 @@ data class ResolvedAudioStream(
 object YtMusicCatalog {
     const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 12; TECNO KI5k) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+
+    // NewPipeExtractor v0.27.1 resolves YouTube streams with the VISIONOS player client.
+    // Keep this identity when probing and playing those signed stream URLs.
+    const val VISIONOS_USER_AGENT =
+        "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; IN)"
+
+    // Changing this tag invalidates persisted stream URLs from older resolver versions.
+    const val STREAM_CACHE_TAG = "|flux-resolver-v2"
     private const val SEARCH_ENDPOINT =
         "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
     private const val PLAYER_ENDPOINT =
@@ -44,12 +52,19 @@ object YtMusicCatalog {
     private const val IOS_UA =
         "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X;)"
 
+    // Avoid the long-unavailable official instance and retired mirrors.
     private val PIPED_INSTANCES = listOf(
-        "https://pipedapi.kavin.rocks",
         "https://api.piped.private.coffee",
-        "https://pipedapi.adminforge.de",
         "https://pipedapi.leptons.xyz",
-        "https://api.piped.yt"
+        "https://pipedapi.nosebs.ru"
+    )
+
+    // Public instances listed by the Invidious project; availability can vary by region.
+    private val INVIDIOUS_INSTANCES = listOf(
+        "https://inv.nadeko.net",
+        "https://invidious.nerdvpn.de",
+        "https://yt.chocolatemoo53.com",
+        "https://invidious.tiekoetter.com"
     )
 
     @Volatile
@@ -261,17 +276,17 @@ object YtMusicCatalog {
     }
 
     private fun resolveWithFallbacks(videoId: String, quality: AudioQuality): ResolvedAudioStream {
-        // Tier 1: NewPipeExtractor progressive streams, ordered by quality and verified with byte-range probe
+        // Primary: current NewPipe VISIONOS extraction with its matching User-Agent.
         resolveViaNewPipe(videoId, quality)?.let { return it }
 
-        // Tier 2: Direct Innertube player clients (ANDROID_VR, then iOS) with matching User-Agent
-        resolveViaInnertubeAndroidVr(videoId, quality)?.let { return it }
-        resolveViaInnertubeIos(videoId, quality)?.let { return it }
-
-        // Tier 3: Public Piped API backup instances
+        // Public APIs are fallbacks for IPs where direct YouTube extraction is rate-limited.
         resolveViaPiped(videoId, quality)?.let { return it }
+        resolveViaInvidious(videoId, quality)?.let { return it }
 
-        throw IOException("Unable to load a playable audio stream right now. Tap Retry.")
+        throw IOException(
+            "No playable stream was returned by YouTube, Piped, or Invidious. " +
+                "The upstream services may be temporarily blocking playback. Tap Retry."
+        )
     }
 
     private fun resolveViaNewPipe(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
@@ -291,8 +306,12 @@ object YtMusicCatalog {
             val ordered = orderNewPipeCandidates(progressive, quality)
             for (candidate in ordered.take(4)) {
                 val url = candidate.content ?: continue
-                if (probeStreamPlayable(url, USER_AGENT)) {
-                    return ResolvedAudioStream(url = url, userAgent = USER_AGENT, source = "newpipe")
+                if (probeStreamPlayable(url, VISIONOS_USER_AGENT)) {
+                    return ResolvedAudioStream(
+                        url = url,
+                        userAgent = VISIONOS_USER_AGENT,
+                        source = "newpipe-visionos"
+                    )
                 }
             }
             null
@@ -401,8 +420,8 @@ object YtMusicCatalog {
             val resolved = runCatching {
                 val conn = (URL("$base/streams/$videoId").openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
-                    connectTimeout = 4000
-                    readTimeout = 6000
+                    connectTimeout = 3000
+                    readTimeout = 5000
                     setRequestProperty("User-Agent", USER_AGENT)
                     setRequestProperty("Accept", "application/json")
                 }
@@ -436,13 +455,57 @@ object YtMusicCatalog {
         return null
     }
 
+    private fun resolveViaInvidious(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
+        for (base in INVIDIOUS_INSTANCES) {
+            val resolved = runCatching {
+                val conn = (URL("$base/api/v1/videos/$videoId").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 3000
+                    readTimeout = 5000
+                    instanceFollowRedirects = true
+                    setRequestProperty("User-Agent", USER_AGENT)
+                    setRequestProperty("Accept", "application/json")
+                }
+                try {
+                    if (conn.responseCode !in 200..299) return@runCatching null
+                    val root = JSONObject(readStream(conn.inputStream))
+                    val formats = root.optJSONArray("adaptiveFormats") ?: return@runCatching null
+                    val candidates = ArrayList<Pair<Int, String>>()
+                    for (i in 0 until formats.length()) {
+                        val item = formats.optJSONObject(i) ?: continue
+                        if (!item.optString("type", "").startsWith("audio/", ignoreCase = true)) continue
+                        val url = item.optString("url", "")
+                        if (!url.startsWith("https://", ignoreCase = true)) continue
+                        val rawBitrate = item.optString("bitrate", "0").toIntOrNull() ?: 0
+                        val kbps = if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate
+                        candidates.add(kbps.coerceAtLeast(1) to url)
+                    }
+                    for ((_, url) in orderRawCandidates(candidates, quality).take(2)) {
+                        if (probeStreamPlayable(url, USER_AGENT)) {
+                            return@runCatching ResolvedAudioStream(
+                                url = url,
+                                userAgent = USER_AGENT,
+                                source = "invidious"
+                            )
+                        }
+                    }
+                    null
+                } finally {
+                    conn.disconnect()
+                }
+            }.getOrNull()
+            if (resolved != null) return resolved
+        }
+        return null
+    }
+
     private fun probeStreamPlayable(urlString: String, userAgent: String): Boolean {
         return runCatching {
             val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 instanceFollowRedirects = true
-                connectTimeout = 4500
-                readTimeout = 4500
+                connectTimeout = 3500
+                readTimeout = 3500
                 setRequestProperty("User-Agent", userAgent)
                 setRequestProperty("Range", "bytes=0-1")
             }
