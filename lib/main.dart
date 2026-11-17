@@ -2680,7 +2680,7 @@ class _NowPlayingSheetState extends State<NowPlayingSheet> {
                     child: Row(children: <Widget>[
                       Icon(Icons.queue_music_rounded, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 20),
                       const SizedBox(width: 12),
-                      const Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
+                      Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
                         Text('Up next', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                         SizedBox(height: 2),
                         Text('Your playback queue', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 10)),
@@ -3027,7 +3027,7 @@ class _LyricsSheetState extends State<LyricsSheet> {
           const SizedBox(height: 16),
           Expanded(
             child: _loading
-                ? const Center(child: Column(
+                ? Center(child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       CircularProgressIndicator(color: _mint),
@@ -3164,18 +3164,17 @@ class _Atmosphere extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Positioned.fill(
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Positioned.fill(
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: <Color>[
-                Theme.of(context).scaffoldBackgroundColor,
-                Color(0xFF151515),
-                Color(0xFF101010),
-              ],
+              colors: dark
+                  ? const <Color>[Color(0xFF17191C), Color(0xFF111214), Color(0xFF111214)]
+                  : const <Color>[Color(0xFFFBFAF7), Color(0xFFF5F2EC), Color(0xFFF7F6F2)],
             ),
           ),
         ),
