@@ -128,16 +128,12 @@ class MusicService : MediaSessionService() {
                     put("TE", "trailers")
                 }
             }
-            val request = dataSpec.buildUpon()
+            // YouTube videoplayback media requests are ranged GETs. NewPipe's
+            // datasource adds rn to the URL; it does not turn media chunks into POSTs.
+            dataSpec.buildUpon()
                 .setUri(Uri.parse(requestUrl))
                 .setHttpRequestHeaders(headers)
-            if (isYoutubeVisionOsStream) {
-                // Match NewPipe's YoutubeHttpDataSource protocol for VISIONOS videoplayback URLs.
-                request
-                    .setHttpMethod(DataSpec.HTTP_METHOD_POST)
-                    .setHttpBody(byteArrayOf(0x78, 0x00))
-            }
-            request.build()
+                .build()
         }
 
         val extractorsFactory = DefaultExtractorsFactory()
