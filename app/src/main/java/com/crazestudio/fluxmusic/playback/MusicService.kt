@@ -114,13 +114,30 @@ class MusicService : MediaSessionService() {
                 quality = currentQuality,
                 forceRefresh = shouldRefresh
             )
+            val isYoutubeVisionOsStream =
+                resolved.userAgent == YtMusicCatalog.VISIONOS_USER_AGENT
+            val requestUrl = if (isYoutubeVisionOsStream) {
+                YtMusicCatalog.prepareYoutubePlaybackUrl(resolved.url)
+            } else {
+                resolved.url
+            }
             val headers = HashMap(dataSpec.httpRequestHeaders).apply {
                 put("User-Agent", resolved.userAgent)
+                put("Accept-Encoding", "identity")
+                if (isYoutubeVisionOsStream) {
+                    put("TE", "trailers")
+                }
             }
-            dataSpec.buildUpon()
-                .setUri(Uri.parse(resolved.url))
+            val request = dataSpec.buildUpon()
+                .setUri(Uri.parse(requestUrl))
                 .setHttpRequestHeaders(headers)
-                .build()
+            if (isYoutubeVisionOsStream) {
+                // Match NewPipe's YoutubeHttpDataSource protocol for VISIONOS videoplayback URLs.
+                request
+                    .setHttpMethod(DataSpec.HTTP_METHOD_POST)
+                    .setHttpBody(byteArrayOf(0x78, 0x00))
+            }
+            request.build()
         }
 
         val extractorsFactory = DefaultExtractorsFactory()
