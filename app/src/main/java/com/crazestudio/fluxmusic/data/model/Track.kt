@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import java.util.Locale
 
 data class Track(
@@ -37,6 +38,7 @@ data class Track(
         return MediaItem.Builder()
             .setMediaId(id)
             .setUri(buildStreamProxyUri(id))
+            .setMimeType(MimeTypes.APPLICATION_MPD)
             .setMediaMetadata(metadata)
             .build()
     }
