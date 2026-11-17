@@ -1190,6 +1190,7 @@ class _MusicHomeState extends State<MusicHome> {
             ),
           ),
           const SizedBox(width: 11),
+          Text('FluxMusic', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.65, color: Theme.of(context).colorScheme.onSurface)),
           const Spacer(),
           Tooltip(
             message: 'Personalize catalogue',
@@ -1230,7 +1231,43 @@ class _MusicHomeState extends State<MusicHome> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
       children: <Widget>[
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
+        Text(
+          _homeGreeting(),
+          style: TextStyle(fontSize: 29, height: 1.08, fontWeight: FontWeight.w800, letterSpacing: -1.1, color: Theme.of(context).colorScheme.onSurface),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          'What do you want to listen to today?',
+          style: TextStyle(fontSize: 13, color: Theme.of(context).colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 17),
+        _searchBox(hint: 'Search songs, artists, albums...', onSubmitted: _search),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 38,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: <Widget>[
+              for (final language in (_selectedLanguages.isNotEmpty
+                  ? _selectedLanguages.take(6)
+                  : <String>{'Hindi', 'Bengali', 'English', 'Tamil', 'Telugu', 'Punjabi'}))
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ActionChip(
+                    label: Text(language),
+                    onPressed: () => _search(CataloguePreferences.queryFor(language)),
+                    backgroundColor: Theme.of(context).colorScheme.surface,
+                    side: BorderSide(color: Theme.of(context).colorScheme.outline),
+                    labelStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _featuredMixCard(),
+        const SizedBox(height: 24),
         Row(children: <Widget>[
           Expanded(child: Text('Recently played', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -.4))),
           if (recent.isNotEmpty)
@@ -1319,12 +1356,12 @@ class _MusicHomeState extends State<MusicHome> {
           mainAxisSpacing: 10,
           childAspectRatio: 2.05,
           children: <Widget>[
-            _catalogueTile('Anime & OST', 'Openings and scores', const Color(0xFF25202B), Icons.auto_awesome_rounded, 'anime openings'),
-            _catalogueTile('Lo-fi & Focus', 'Stay in your zone', const Color(0xFF202820), Icons.headphones_rounded, 'lofi beats focus'),
-            _catalogueTile('Indian Hits', 'Hindi • Bengali • more', const Color(0xFF2A211F), Icons.graphic_eq_rounded, 'Indian hit songs Hindi Bengali'),
-            _catalogueTile('Indie Finds', 'Beyond the mainstream', const Color(0xFF20252B), Icons.album_rounded, 'indie music'),
-            _catalogueTile('Chill & Ambient', 'Slow down a little', const Color(0xFF29291E), Icons.nightlight_round, 'chill ambient music'),
-            _catalogueTile('Workout Energy', 'Turn it up', const Color(0xFF2A2026), Icons.bolt_rounded, 'workout upbeat music'),
+            _catalogueTile('Anime & OST', 'Openings and scores', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.auto_awesome_rounded, 'anime openings'),
+            _catalogueTile('Lo-fi & Focus', 'Stay in your zone', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.headphones_rounded, 'lofi beats focus'),
+            _catalogueTile('Indian Hits', 'Hindi • Bengali • more', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.graphic_eq_rounded, 'Indian hit songs Hindi Bengali'),
+            _catalogueTile('Indie Finds', 'Beyond the mainstream', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.album_rounded, 'indie music'),
+            _catalogueTile('Chill & Ambient', 'Slow down a little', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.nightlight_round, 'chill ambient music'),
+            _catalogueTile('Workout Energy', 'Turn it up', Theme.of(context).colorScheme.surfaceContainerHighest, Icons.bolt_rounded, 'workout upbeat music'),
           ],
         ),
         const SizedBox(height: 18),
@@ -1350,6 +1387,68 @@ class _MusicHomeState extends State<MusicHome> {
         ),
         const SizedBox(height: 8),
       ],
+    );
+  }
+
+  String _homeGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning,';
+    if (hour < 17) return 'Good afternoon,';
+    return 'Good evening,';
+  }
+
+  Widget _featuredMixCard() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(22),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _search('chill Indian vibes Hindi Bengali'),
+        child: Container(
+          height: 154,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: dark
+                  ? const <Color>[Color(0xFF49301F), Color(0xFF242326), Color(0xFF17191C)]
+                  : const <Color>[Color(0xFFDAA77E), Color(0xFFB87550), Color(0xFF67483D)],
+            ),
+          ),
+          child: Stack(children: <Widget>[
+            Positioned(
+              right: -4, top: -22,
+              child: Icon(Icons.album_rounded, size: 142, color: Colors.white.withValues(alpha: .13)),
+            ),
+            Positioned(
+              right: 18, bottom: 4,
+              child: Icon(Icons.graphic_eq_rounded, size: 72, color: Colors.white.withValues(alpha: .20)),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
+                Text('FEATURED PLAYLIST', style: TextStyle(color: Colors.white.withValues(alpha: .78), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.7)),
+                const SizedBox(height: 7),
+                const Text('Chill Indian Vibes', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -.5)),
+                const SizedBox(height: 4),
+                Text('Hindi  ·  Bengali  ·  Lo-fi', style: TextStyle(color: Colors.white.withValues(alpha: .82), fontSize: 11, fontWeight: FontWeight.w500)),
+              ],
+            ),
+            Positioned(
+              right: 5, bottom: 3,
+              child: Container(
+                width: 42, height: 42,
+                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                child: Icon(Icons.play_arrow_rounded, color: dark ? const Color(0xFF2C211B) : const Color(0xFF70432F), size: 27),
+              ),
+            ),
+          ]),
+        ),
+      ),
     );
   }
 
