@@ -3,7 +3,6 @@ package com.crazestudio.fluxmusic
 import android.app.Application
 import com.crazestudio.fluxmusic.data.local.db.FluxDatabase
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferencesRepository
-import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import com.crazestudio.fluxmusic.data.repository.MusicRepository
 
 class FluxApplication : Application() {
@@ -22,6 +21,6 @@ class FluxApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        YtMusicCatalog.warmUp()
+        // MusicService initializes networking only when online playback is enabled.
     }
 }
