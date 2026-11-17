@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/ic_launcher_art_1794925594313"
+        android:drawable="@drawable/ic_flux_notes_logo"
         android:gravity="center" />
 </layer-list>

@@ -57,6 +57,7 @@ class PlaybackController(
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
     private var tickerJob: Job? = null
+    private var pendingPlayRequest: Triple<List<Track>, Int, String>? = null
 
     fun connect() {
         if (controllerFuture != null) return
@@ -74,6 +75,10 @@ class PlaybackController(
                 syncFromPlayer()
                 sendCustomCommand(MusicService.CMD_SYNC_EXTRAS, Bundle.EMPTY)
                 startTicker()
+                pendingPlayRequest?.let { (tracks, idx, label) ->
+                    pendingPlayRequest = null
+                    playQueue(tracks, idx, label)
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(playbackError = "Could not connect to playback service.") }
             }
@@ -91,7 +96,7 @@ class PlaybackController(
                         _state.update { it.copy(positionMs = pos, durationMs = dur) }
                     }
                 }
-                delay(500L)
+                delay(250L)
             }
         }
     }
@@ -106,9 +111,9 @@ class PlaybackController(
         val duration = c.duration.takeIf { it > 0L } ?: activeTrack?.durationMs ?: 0L
         _state.update {
             it.copy(
-                activeTrack = activeTrack,
-                queue = queueItems,
-                currentIndex = activeIdx,
+                activeTrack = activeTrack ?: it.activeTrack,
+                queue = if (queueItems.isNotEmpty()) queueItems else it.queue,
+                currentIndex = if (activeIdx >= 0) activeIdx else it.currentIndex,
                 isPlaying = c.isPlaying,
                 isBuffering = c.playbackState == Player.STATE_BUFFERING,
                 positionMs = c.currentPosition.coerceAtLeast(0L),
@@ -122,15 +127,40 @@ class PlaybackController(
 
     fun playQueue(tracks: List<Track>, startIndex: Int, sourceLabel: String) {
         if (tracks.isEmpty()) return
-        val c = controller ?: return
         val safeIdx = startIndex.coerceIn(0, tracks.lastIndex)
+        val selected = tracks[safeIdx]
+        _state.update {
+            it.copy(
+                activeTrack = selected,
+                queue = tracks,
+                currentIndex = safeIdx,
+                sourceLabel = sourceLabel,
+                isBuffering = true,
+                positionMs = 0L,
+                durationMs = selected.durationMs,
+                playbackError = null
+            )
+        }
+        val c = controller
+        if (c == null) {
+            pendingPlayRequest = Triple(tracks, safeIdx, sourceLabel)
+            connect()
+            return
+        }
         val mediaItems = tracks.map { it.toMediaItem() }
-        _state.update { it.copy(sourceLabel = sourceLabel, playbackError = null) }
         c.setMediaItems(mediaItems, safeIdx, 0L)
         c.prepare()
         c.play()
         syncFromPlayer()
-        tracks.getOrNull(safeIdx)?.let(onTrackStarted)
+        onTrackStarted(selected)
+    }
+
+    fun retryCurrent() {
+        val c = controller ?: return
+        _state.update { it.copy(playbackError = null, isBuffering = true) }
+        sendCustomCommand(MusicService.CMD_RETRY_FRESH, Bundle.EMPTY)
+        c.prepare()
+        c.play()
     }
 
     fun playNext(track: Track) {

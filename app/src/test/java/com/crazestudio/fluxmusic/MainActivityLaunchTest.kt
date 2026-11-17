@@ -44,6 +44,7 @@ class MainActivityLaunchTest {
     @Test
     fun appLaunchesAndNavigatesAllTabsWithoutCrashing() {
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("home_brand_logo").assertIsDisplayed()
         composeRule.onNodeWithText("FluxMusic").assertIsDisplayed()
         composeRule.onNodeWithTag("home_featured_banner").assertIsDisplayed()
 

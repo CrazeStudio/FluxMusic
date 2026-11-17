@@ -3,6 +3,7 @@ package com.crazestudio.fluxmusic
 import android.app.Application
 import com.crazestudio.fluxmusic.data.local.db.FluxDatabase
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferencesRepository
+import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import com.crazestudio.fluxmusic.data.repository.MusicRepository
 
 class FluxApplication : Application() {
@@ -13,7 +14,14 @@ class FluxApplication : Application() {
             trackDao = database.trackDao(),
             playlistDao = database.playlistDao(),
             historyDao = database.historyDao(),
+            streamCacheDao = database.streamCacheDao(),
+            lyricsDao = database.lyricsDao(),
             prefsRepo = preferencesRepository
         )
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        YtMusicCatalog.warmUp()
     }
 }

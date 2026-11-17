@@ -9,6 +9,7 @@ import com.crazestudio.fluxmusic.data.model.AudioQuality
 import com.crazestudio.fluxmusic.data.model.EqualizerPreset
 import com.crazestudio.fluxmusic.data.model.ThemeMode
 import com.crazestudio.fluxmusic.data.model.Track
+import com.crazestudio.fluxmusic.data.model.TrackLyrics
 import com.crazestudio.fluxmusic.data.repository.MusicRepository
 import com.crazestudio.fluxmusic.playback.PlaybackController
 import com.crazestudio.fluxmusic.playback.PlaybackUiState
@@ -35,6 +36,13 @@ data class SearchUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val results: List<Track> = emptyList(),
+    val error: String? = null
+)
+
+data class LyricsUiState(
+    val trackId: String? = null,
+    val isLoading: Boolean = false,
+    val lyrics: TrackLyrics? = null,
     val error: String? = null
 )
 
@@ -79,7 +87,11 @@ class MusicViewModel(
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     val snackbarMessage: StateFlow<String?> = _snackbarMessage.asStateFlow()
 
+    private val _lyricsState = MutableStateFlow(LyricsUiState())
+    val lyricsState: StateFlow<LyricsUiState> = _lyricsState.asStateFlow()
+
     private var searchJob: Job? = null
+    private var lyricsJob: Job? = null
 
     init {
         playback.connect()
@@ -185,7 +197,7 @@ class MusicViewModel(
             return
         }
         viewModelScope.launch {
-            tracks.forEach { repository.cacheTrack(it) }
+            repository.cacheTracks(tracks)
         }
         playback.playQueue(tracks, startIndex, sourceLabel)
     }
@@ -289,6 +301,33 @@ class MusicViewModel(
             endOfTrack -> "Sleep timer set for end of current track"
             minutes > 0 -> "Sleep timer set for $minutes min"
             else -> "Sleep timer cancelled"
+        }
+    }
+
+    fun loadLyricsForTrack(track: Track, forceRefresh: Boolean = false) {
+        val existing = _lyricsState.value
+        if (!forceRefresh && existing.trackId == track.id && (existing.isLoading || existing.lyrics != null)) {
+            return
+        }
+        lyricsJob?.cancel()
+        lyricsJob = viewModelScope.launch {
+            _lyricsState.value = LyricsUiState(trackId = track.id, isLoading = true)
+            val result = repository.getLyrics(track, forceRefresh = forceRefresh)
+            result.onSuccess { lyrics ->
+                _lyricsState.value = LyricsUiState(
+                    trackId = track.id,
+                    isLoading = false,
+                    lyrics = lyrics,
+                    error = null
+                )
+            }.onFailure { err ->
+                _lyricsState.value = LyricsUiState(
+                    trackId = track.id,
+                    isLoading = false,
+                    lyrics = null,
+                    error = err.message ?: "Could not reach LRCLIB right now."
+                )
+            }
         }
     }
 

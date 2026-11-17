@@ -99,3 +99,26 @@ data class PlaylistSummary(
     val trackCount: Int,
     val coverThumbnailUrl: String?
 )
+
+@Entity(
+    tableName = "stream_cache",
+    primaryKeys = ["videoId", "quality"]
+)
+data class StreamCacheEntity(
+    val videoId: String,
+    val quality: String,
+    val streamUrl: String,
+    val userAgent: String = "",
+    val expiresAt: Long
+)
+
+@Entity(tableName = "lyrics_cache")
+data class LyricsCacheEntity(
+    @PrimaryKey val videoId: String,
+    val trackName: String,
+    val artistName: String,
+    val syncedLyrics: String?,
+    val plainLyrics: String?,
+    val instrumental: Boolean = false,
+    val fetchedAt: Long = System.currentTimeMillis()
+)

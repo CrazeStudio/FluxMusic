@@ -172,6 +172,7 @@ private fun FluxMusicApp(viewModel: MusicViewModel) {
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
     val cachedTrackCount by viewModel.cachedTrackCount.collectAsStateWithLifecycle()
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
+    val lyricsState by viewModel.lyricsState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -429,10 +430,13 @@ private fun FluxMusicApp(viewModel: MusicViewModel) {
             val activeId = playbackState.activeTrack?.id
             NowPlayingOverlay(
                 playbackState = playbackState,
+                lyricsState = lyricsState,
+                offlineCacheMode = preferences.offlineCacheMode,
                 isFavorite = activeId != null && activeId in favoriteIds,
                 onDismiss = { showPlayerOverlay = false },
                 onToggleFavorite = viewModel::toggleFavorite,
                 onAddToPlaylist = { playlistPickerTrack = it },
+                onLoadLyrics = viewModel::loadLyricsForTrack,
                 onSeekTo = { viewModel.playback.seekTo(it) },
                 onTogglePlayPause = { viewModel.playback.togglePlayPause() },
                 onSkipPrevious = { viewModel.playback.skipPrevious() },
@@ -442,7 +446,8 @@ private fun FluxMusicApp(viewModel: MusicViewModel) {
                 onOpenQueue = { showQueueSheet = true },
                 onOpenEqualizer = { showEqualizerSheet = true },
                 onOpenSleepTimer = { showSleepSheet = true },
-                onOpenSpeed = { showSpeedSheet = true }
+                onOpenSpeed = { showSpeedSheet = true },
+                onRetry = { viewModel.playback.retryCurrent() }
             )
         }
     }

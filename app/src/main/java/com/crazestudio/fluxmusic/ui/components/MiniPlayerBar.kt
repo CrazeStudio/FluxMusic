@@ -100,9 +100,17 @@ fun MiniPlayerBar(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = active.safeArtist,
+                                text = if (playbackState.isBuffering && !playbackState.isPlaying) {
+                                    "Connecting stream… · ${active.safeArtist}"
+                                } else {
+                                    active.safeArtist
+                                },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (playbackState.isBuffering && !playbackState.isPlaying) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

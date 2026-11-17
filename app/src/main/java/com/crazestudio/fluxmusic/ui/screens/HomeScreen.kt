@@ -107,13 +107,21 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_flux_logo),
-                        contentDescription = "FluxMusic logo",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(30.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .testTag("home_brand_logo")
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_flux_notes_logo),
+                            contentDescription = "FluxMusic logo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "FluxMusic",

@@ -1,32 +1,83 @@
 package com.crazestudio.fluxmusic.data.repository
 
 import com.crazestudio.fluxmusic.data.local.db.HistoryDao
+import com.crazestudio.fluxmusic.data.local.db.LyricsCacheEntity
+import com.crazestudio.fluxmusic.data.local.db.LyricsDao
 import com.crazestudio.fluxmusic.data.local.db.PlaylistDao
 import com.crazestudio.fluxmusic.data.local.db.PlaylistEntity
 import com.crazestudio.fluxmusic.data.local.db.PlaylistSummary
 import com.crazestudio.fluxmusic.data.local.db.RecentPlayEntity
 import com.crazestudio.fluxmusic.data.local.db.SearchHistoryEntity
+import com.crazestudio.fluxmusic.data.local.db.StreamCacheDao
+import com.crazestudio.fluxmusic.data.local.db.StreamCacheEntity
 import com.crazestudio.fluxmusic.data.local.db.TrackDao
 import com.crazestudio.fluxmusic.data.local.db.TrackEntity
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferences
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferencesRepository
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import com.crazestudio.fluxmusic.data.model.EqualizerPreset
+import com.crazestudio.fluxmusic.data.model.LrcParser
 import com.crazestudio.fluxmusic.data.model.ThemeMode
 import com.crazestudio.fluxmusic.data.model.Track
+import com.crazestudio.fluxmusic.data.model.TrackLyrics
+import com.crazestudio.fluxmusic.data.remote.LrcLibClient
+import com.crazestudio.fluxmusic.data.remote.ResolvedAudioStream
 import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 class MusicRepository(
     private val trackDao: TrackDao,
     private val playlistDao: PlaylistDao,
     private val historyDao: HistoryDao,
+    private val streamCacheDao: StreamCacheDao,
+    private val lyricsDao: LyricsDao,
     private val prefsRepo: UserPreferencesRepository
 ) {
+    init {
+        YtMusicCatalog.attachPersistentStreamStore(
+            reader = { videoId, quality ->
+                runCatching {
+                    runBlocking {
+                        streamCacheDao.getValidStream(videoId, quality.name)?.let { entity ->
+                            ResolvedAudioStream(
+                                url = entity.streamUrl,
+                                userAgent = entity.userAgent.ifBlank { YtMusicCatalog.USER_AGENT },
+                                source = "cache"
+                            )
+                        }
+                    }
+                }.getOrNull()
+            },
+            writer = { videoId, quality, stream, expiresAt ->
+                runCatching {
+                    runBlocking {
+                        streamCacheDao.upsertStream(
+                            StreamCacheEntity(
+                                videoId = videoId,
+                                quality = quality.name,
+                                streamUrl = stream.url,
+                                userAgent = stream.userAgent,
+                                expiresAt = expiresAt
+                            )
+                        )
+                    }
+                }
+            },
+            invalidator = { videoId ->
+                runCatching {
+                    runBlocking {
+                        streamCacheDao.deleteByVideoId(videoId)
+                    }
+                }
+            }
+        )
+    }
+
     val preferences: Flow<UserPreferences> = prefsRepo.preferencesFlow
 
     val cachedTracks: Flow<List<Track>> = trackDao.observeCachedTracks()
@@ -80,6 +131,9 @@ class MusicRepository(
             runCatching {
                 val found = YtMusicCatalog.search(query, languageHint)
                 cacheTracksPreservingFavorites(found)
+                if (found.isNotEmpty()) {
+                    YtMusicCatalog.prefetchAudioUrls(found.take(2).map { it.id }, prefs.audioQuality)
+                }
                 val existingMap = trackDao.getTracksByIds(found.map { it.id }).associateBy { it.id }
                 found.map { track ->
                     existingMap[track.id]?.toDomain() ?: track
@@ -87,8 +141,50 @@ class MusicRepository(
             }
         }
 
+    suspend fun getLyrics(track: Track, forceRefresh: Boolean = false): Result<TrackLyrics?> =
+        withContext(Dispatchers.IO) {
+            if (!forceRefresh) {
+                lyricsDao.getLyrics(track.id)?.let { cached ->
+                    return@withContext Result.success(
+                        TrackLyrics(
+                            videoId = cached.videoId,
+                            syncedLines = LrcParser.parse(cached.syncedLyrics),
+                            plainLyrics = cached.plainLyrics,
+                            rawSyncedLrc = cached.syncedLyrics,
+                            instrumental = cached.instrumental,
+                            fromCache = true
+                        )
+                    )
+                }
+            }
+            val prefs = prefsRepo.preferencesFlow.first()
+            if (prefs.offlineCacheMode) {
+                return@withContext Result.success(null)
+            }
+            runCatching {
+                val fetched = LrcLibClient.fetchLyrics(track)
+                if (fetched != null) {
+                    lyricsDao.upsertLyrics(
+                        LyricsCacheEntity(
+                            videoId = track.id,
+                            trackName = track.safeTitle,
+                            artistName = track.safeArtist,
+                            syncedLyrics = fetched.rawSyncedLrc,
+                            plainLyrics = fetched.plainLyrics,
+                            instrumental = fetched.instrumental
+                        )
+                    )
+                }
+                fetched
+            }
+        }
+
     suspend fun cacheTrack(track: Track) = withContext(Dispatchers.IO) {
         cacheTracksPreservingFavorites(listOf(track))
+    }
+
+    suspend fun cacheTracks(tracks: List<Track>) = withContext(Dispatchers.IO) {
+        cacheTracksPreservingFavorites(tracks)
     }
 
     private suspend fun cacheTracksPreservingFavorites(tracks: List<Track>) {
@@ -145,6 +241,8 @@ class MusicRepository(
 
     suspend fun clearCachedMetadata() = withContext(Dispatchers.IO) {
         trackDao.clearUncachedOrphans()
+        streamCacheDao.clearAll()
+        lyricsDao.clearAll()
         YtMusicCatalog.clearStreamCache()
     }
 

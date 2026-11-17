@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -28,9 +27,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -49,12 +50,15 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,14 +73,18 @@ import androidx.media3.common.Player
 import com.crazestudio.fluxmusic.R
 import com.crazestudio.fluxmusic.data.model.Track
 import com.crazestudio.fluxmusic.playback.PlaybackUiState
+import com.crazestudio.fluxmusic.ui.viewmodel.LyricsUiState
 
 @Composable
 fun NowPlayingOverlay(
     playbackState: PlaybackUiState,
+    lyricsState: LyricsUiState,
+    offlineCacheMode: Boolean,
     isFavorite: Boolean,
     onDismiss: () -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onLoadLyrics: (Track, Boolean) -> Unit,
     onSeekTo: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onSkipPrevious: () -> Unit,
@@ -87,11 +95,19 @@ fun NowPlayingOverlay(
     onOpenEqualizer: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     onOpenSpeed: () -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler(onBack = onDismiss)
 
     val active = playbackState.activeTrack
+    var showLyrics by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(showLyrics, active?.id) {
+        if (showLyrics && active != null) {
+            onLoadLyrics(active, false)
+        }
+    }
 
     Box(
         modifier = modifier
@@ -170,7 +186,15 @@ fun NowPlayingOverlay(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                ArtworkLyricsModeToggle(
+                    showLyrics = showLyrics,
+                    onSelectLyrics = { showLyrics = it },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
 
                 if (isWide) {
                     Row(
@@ -186,12 +210,27 @@ fun NowPlayingOverlay(
                                 .padding(12.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            PlayerArtworkCard(
-                                track = active,
-                                modifier = Modifier
-                                    .widthIn(max = 360.dp)
-                                    .aspectRatio(1f)
-                            )
+                            if (showLyrics) {
+                                LyricsStageCard(
+                                    track = active,
+                                    lyricsState = lyricsState,
+                                    positionMs = playbackState.positionMs,
+                                    offlineCacheMode = offlineCacheMode,
+                                    onSeekTo = onSeekTo,
+                                    onRetry = onLoadLyrics,
+                                    modifier = Modifier
+                                        .widthIn(max = 420.dp)
+                                        .fillMaxWidth()
+                                        .height(380.dp)
+                                )
+                            } else {
+                                PlayerArtworkCard(
+                                    track = active,
+                                    modifier = Modifier
+                                        .widthIn(max = 360.dp)
+                                        .aspectRatio(1f)
+                                )
+                            }
                         }
                         Column(
                             modifier = Modifier
@@ -203,6 +242,8 @@ fun NowPlayingOverlay(
                                 playbackState = playbackState,
                                 active = active,
                                 isFavorite = isFavorite,
+                                showLyrics = showLyrics,
+                                onToggleLyrics = { showLyrics = !showLyrics },
                                 onToggleFavorite = onToggleFavorite,
                                 onSeekTo = onSeekTo,
                                 onTogglePlayPause = onTogglePlayPause,
@@ -213,7 +254,8 @@ fun NowPlayingOverlay(
                                 onOpenQueue = onOpenQueue,
                                 onOpenEqualizer = onOpenEqualizer,
                                 onOpenSleepTimer = onOpenSleepTimer,
-                                onOpenSpeed = onOpenSpeed
+                                onOpenSpeed = onOpenSpeed,
+                                onRetry = onRetry
                             )
                         }
                     }
@@ -229,24 +271,41 @@ fun NowPlayingOverlay(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            PlayerArtworkCard(
-                                track = active,
-                                modifier = Modifier
-                                    .widthIn(max = 330.dp)
-                                    .fillMaxWidth()
-                                    .aspectRatio(1f)
-                            )
+                            if (showLyrics) {
+                                LyricsStageCard(
+                                    track = active,
+                                    lyricsState = lyricsState,
+                                    positionMs = playbackState.positionMs,
+                                    offlineCacheMode = offlineCacheMode,
+                                    onSeekTo = onSeekTo,
+                                    onRetry = onLoadLyrics,
+                                    modifier = Modifier
+                                        .widthIn(max = 400.dp)
+                                        .fillMaxWidth()
+                                        .height(330.dp)
+                                )
+                            } else {
+                                PlayerArtworkCard(
+                                    track = active,
+                                    modifier = Modifier
+                                        .widthIn(max = 330.dp)
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
                         PlayerControlsBlock(
                             playbackState = playbackState,
                             active = active,
                             isFavorite = isFavorite,
+                            showLyrics = showLyrics,
+                            onToggleLyrics = { showLyrics = !showLyrics },
                             onToggleFavorite = onToggleFavorite,
                             onSeekTo = onSeekTo,
                             onTogglePlayPause = onTogglePlayPause,
@@ -257,9 +316,63 @@ fun NowPlayingOverlay(
                             onOpenQueue = onOpenQueue,
                             onOpenEqualizer = onOpenEqualizer,
                             onOpenSleepTimer = onOpenSleepTimer,
-                            onOpenSpeed = onOpenSpeed
+                            onOpenSpeed = onOpenSpeed,
+                            onRetry = onRetry
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArtworkLyricsModeToggle(
+    showLyrics: Boolean,
+    onSelectLyrics: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = modifier
+    ) {
+        Row(
+            modifier = Modifier.padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                onClick = { onSelectLyrics(false) },
+                color = if (!showLyrics) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                contentColor = if (!showLyrics) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.testTag("player_mode_artwork")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    Icon(Icons.Rounded.Album, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("Artwork", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            Surface(
+                onClick = { onSelectLyrics(true) },
+                color = if (showLyrics) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                contentColor = if (showLyrics) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.testTag("player_mode_lyrics")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                ) {
+                    Icon(Icons.Rounded.Lyrics, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("Lyrics", style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -287,6 +400,8 @@ private fun PlayerControlsBlock(
     playbackState: PlaybackUiState,
     active: Track?,
     isFavorite: Boolean,
+    showLyrics: Boolean,
+    onToggleLyrics: () -> Unit,
     onToggleFavorite: (Track) -> Unit,
     onSeekTo: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
@@ -297,7 +412,8 @@ private fun PlayerControlsBlock(
     onOpenQueue: () -> Unit,
     onOpenEqualizer: () -> Unit,
     onOpenSleepTimer: () -> Unit,
-    onOpenSpeed: () -> Unit
+    onOpenSpeed: () -> Unit,
+    onRetry: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -336,6 +452,15 @@ private fun PlayerControlsBlock(
             }
         }
 
+        if (playbackState.isBuffering && playbackState.playbackError == null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = if (playbackState.positionMs == 0L) "Connecting audio stream…" else "Buffering…",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+
         if (playbackState.playbackError != null) {
             Spacer(modifier = Modifier.height(8.dp))
             Surface(
@@ -343,12 +468,20 @@ private fun PlayerControlsBlock(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = playbackState.playbackError,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(10.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = playbackState.playbackError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = onRetry) {
+                        Text("Retry")
+                    }
+                }
             }
         }
 
@@ -489,13 +622,23 @@ private fun PlayerControlsBlock(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            ActionPill(
+                label = "Lyrics",
+                active = showLyrics,
+                icon = {
+                    Icon(Icons.Rounded.Lyrics, contentDescription = null, modifier = Modifier.size(16.dp))
+                },
+                onClick = onToggleLyrics,
+                tag = "player_lyrics_pill"
+            )
+
             ActionPill(
                 label = "${"%.2f".format(playbackState.playbackSpeed)}x",
                 active = kotlin.math.abs(playbackState.playbackSpeed - 1.0f) > 0.02f,

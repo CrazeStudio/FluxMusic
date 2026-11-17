@@ -149,3 +149,34 @@ interface HistoryDao {
     @Query("DELETE FROM search_history")
     suspend fun clearSearchHistory()
 }
+
+@Dao
+interface StreamCacheDao {
+    @Query("SELECT * FROM stream_cache WHERE videoId = :videoId AND quality = :quality AND expiresAt > :now LIMIT 1")
+    suspend fun getValidStream(videoId: String, quality: String, now: Long = System.currentTimeMillis()): StreamCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertStream(entry: StreamCacheEntity)
+
+    @Query("DELETE FROM stream_cache WHERE videoId = :videoId")
+    suspend fun deleteByVideoId(videoId: String)
+
+    @Query("DELETE FROM stream_cache WHERE expiresAt <= :now")
+    suspend fun deleteExpired(now: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM stream_cache")
+    suspend fun clearAll()
+}
+
+@Dao
+interface LyricsDao {
+    @Query("SELECT * FROM lyrics_cache WHERE videoId = :videoId LIMIT 1")
+    suspend fun getLyrics(videoId: String): LyricsCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLyrics(entry: LyricsCacheEntity)
+
+    @Query("DELETE FROM lyrics_cache")
+    suspend fun clearAll()
+}
+
