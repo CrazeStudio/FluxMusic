@@ -120,18 +120,6 @@ class MusicService : MediaSessionService() {
                     .build()
             }
 
-            val host = dataSpec.uri.host.orEmpty()
-            if (host.endsWith("googlevideo.com", ignoreCase = true)) {
-                val headers = HashMap(dataSpec.httpRequestHeaders).apply {
-                    put("User-Agent", YtMusicCatalog.VISIONOS_USER_AGENT)
-                    put("Accept-Encoding", "identity")
-                    put("TE", "trailers")
-                }
-                return@Factory dataSpec.buildUpon()
-                    .setUri(Uri.parse(YtMusicCatalog.prepareYoutubePlaybackUrl(dataSpec.uri.toString())))
-                    .setHttpRequestHeaders(headers)
-                    .build()
-            }
             dataSpec
         }
 
