@@ -2,6 +2,7 @@ package com.crazestudio.fluxmusic.data.remote
 
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import com.crazestudio.fluxmusic.data.model.Track
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import org.schabi.newpipe.extractor.NewPipe
@@ -41,22 +42,18 @@ object YtMusicCatalog {
     const val STREAM_CACHE_TAG = "|flux-resolver-v2"
     private const val SEARCH_ENDPOINT =
         "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
-    private const val PLAYER_ENDPOINT =
-        "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
     private const val CLIENT_VERSION = "1.20261116.01.00"
     private const val SEARCH_CACHE_TTL_MS = 10 * 60 * 1000L
     const val STREAM_CACHE_TTL_MS = 3 * 60 * 60 * 1000L
-
-    private const val ANDROID_VR_UA =
-        "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-    private const val IOS_UA =
-        "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X;)"
 
     // Avoid the long-unavailable official instance and retired mirrors.
     private val PIPED_INSTANCES = listOf(
         "https://api.piped.private.coffee",
         "https://pipedapi.leptons.xyz",
-        "https://pipedapi.nosebs.ru"
+        "https://pipedapi.nosebs.ru",
+        "https://piped-api.privacy.com.de",
+        "https://pipedapi.owo.si",
+        "https://pipedapi.drgns.space"
     )
 
     // Public instances listed by the Invidious project; availability can vary by region.
@@ -290,7 +287,7 @@ object YtMusicCatalog {
     }
 
     private fun resolveViaNewPipe(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
-        return runCatching {
+        return try {
             initializeExtractor()
             val service = NewPipe.getService("YouTube")
             val extractor = service.getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
@@ -315,104 +312,10 @@ object YtMusicCatalog {
                 }
             }
             null
-        }.getOrNull()
-    }
-
-    private fun resolveViaInnertubeAndroidVr(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
-        val client = JSONObject()
-            .put("clientName", "ANDROID_VR")
-            .put("clientVersion", "1.60.19")
-            .put("deviceMake", "Oculus")
-            .put("deviceModel", "Quest 3")
-            .put("osName", "Android")
-            .put("osVersion", "12L")
-            .put("androidSdkVersion", 32)
-            .put("hl", "en")
-            .put("gl", "US")
-        return fetchInnertubeAudio(
-            videoId = videoId,
-            quality = quality,
-            clientJson = client,
-            clientNameHeader = "28",
-            clientVersion = "1.60.19",
-            userAgent = ANDROID_VR_UA,
-            sourceLabel = "innertube_vr"
-        )
-    }
-
-    private fun resolveViaInnertubeIos(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
-        val client = JSONObject()
-            .put("clientName", "IOS")
-            .put("clientVersion", "19.45.4")
-            .put("deviceMake", "Apple")
-            .put("deviceModel", "iPhone16,2")
-            .put("osName", "iPhone")
-            .put("osVersion", "18.1.0.22B83")
-            .put("hl", "en")
-            .put("gl", "US")
-        return fetchInnertubeAudio(
-            videoId = videoId,
-            quality = quality,
-            clientJson = client,
-            clientNameHeader = "5",
-            clientVersion = "19.45.4",
-            userAgent = IOS_UA,
-            sourceLabel = "innertube_ios"
-        )
-    }
-
-    private fun fetchInnertubeAudio(
-        videoId: String,
-        quality: AudioQuality,
-        clientJson: JSONObject,
-        clientNameHeader: String,
-        clientVersion: String,
-        userAgent: String,
-        sourceLabel: String
-    ): ResolvedAudioStream? {
-        return runCatching {
-            val payload = JSONObject()
-                .put("context", JSONObject().put("client", clientJson))
-                .put("videoId", videoId)
-                .put("contentCheckOk", true)
-                .put("racyCheckOk", true)
-
-            val conn = (URL(PLAYER_ENDPOINT).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 5000
-                readTimeout = 7000
-                setRequestProperty("User-Agent", userAgent)
-                setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("X-YouTube-Client-Name", clientNameHeader)
-                setRequestProperty("X-YouTube-Client-Version", clientVersion)
-                doOutput = true
-            }
-            try {
-                conn.outputStream.use { it.write(payload.toString().toByteArray(StandardCharsets.UTF_8)) }
-                if (conn.responseCode !in 200..299) return null
-                val root = JSONObject(readStream(conn.inputStream))
-                val adaptive = root.optJSONObject("streamingData")?.optJSONArray("adaptiveFormats") ?: return null
-                val candidates = ArrayList<Pair<Int, String>>()
-                for (i in 0 until adaptive.length()) {
-                    val fmt = adaptive.optJSONObject(i) ?: continue
-                    val mime = fmt.optString("mimeType", "")
-                    val url = fmt.optString("url", "")
-                    if (mime.startsWith("audio/", ignoreCase = true) && url.isNotBlank() && !url.contains(".m3u8")) {
-                        val bitrateKbps = (fmt.optInt("bitrate", 0) / 1000).coerceAtLeast(1)
-                        candidates.add(bitrateKbps to url)
-                    }
-                }
-                val ordered = orderRawCandidates(candidates, quality)
-                for ((_, url) in ordered.take(3)) {
-                    if (probeStreamPlayable(url, userAgent)) {
-                        return ResolvedAudioStream(url = url, userAgent = userAgent, source = sourceLabel)
-                    }
-                }
-                null
-            } finally {
-                conn.disconnect()
-            }
-        }.getOrNull()
+        } catch (e: Exception) {
+            Log.w("FluxMusicPlayback", "NewPipe VISIONOS extraction failed: ${e.message}", e)
+            null
+        }
     }
 
     private fun resolveViaPiped(videoId: String, quality: AudioQuality): ResolvedAudioStream? {
