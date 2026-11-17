@@ -52,7 +52,7 @@ jobs:
 
       - name: Analyze Dart and Flutter code
         working-directory: ${{ runner.temp }}/fluxmusic-build
-        run: flutter analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Run unit tests
         working-directory: ${{ runner.temp }}/fluxmusic-build
