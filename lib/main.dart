@@ -1551,7 +1551,7 @@ class _MusicHomeState extends State<MusicHome> {
               border: Border.all(color: colors.last),
             ),
             child: Stack(children: <Widget>[
-              Positioned(right: -13, top: -19, child: Icon(icon, size: 95, color: _cardInk.withValues(alpha: .075))),
+              Positioned(right: -13, top: -19, child: Icon(icon, size: 95, color: Colors.white.withValues(alpha: .075))),
               Padding(
                 padding: const EdgeInsets.all(13),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: <Widget>[
@@ -1561,12 +1561,12 @@ class _MusicHomeState extends State<MusicHome> {
                     child: Icon(icon, color: const Color(0xFF21160F), size: 19),
                   ),
                   const Spacer(),
-                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontSize: 12, fontWeight: FontWeight.w800)),
+                  Text(mood, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Row(children: <Widget>[
-                    Text('PLAY MIX', style: TextStyle(fontSize: 8, color: Theme.of(context).colorScheme.onSurfaceVariant, fontWeight: FontWeight.w800, letterSpacing: 1.05)),
+                    Text('PLAY MIX', style: TextStyle(fontSize: 8, color: Colors.white.withValues(alpha: .72), fontWeight: FontWeight.w800, letterSpacing: 1.05)),
                     const Spacer(),
-                    Icon(Icons.arrow_outward_rounded, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: .72), size: 13),
+                    Icon(Icons.arrow_outward_rounded, color: Colors.white.withValues(alpha: .82), size: 13),
                   ]),
                 ]),
               ),
