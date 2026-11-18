@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId 'com.crazestudio.fluxmusic'
-        minSdk 24
+        minSdk 23
         targetSdk 36
         versionCode 3
         versionName '3.0.0'
@@ -68,7 +68,6 @@ dependencies {
 
     implementation 'androidx.media3:media3-exoplayer:1.11.1'
     implementation 'androidx.media3:media3-session:1.11.1'
-    implementation 'io.github.junkfood02.youtubedl-android:library:0.18.1'
     // Kept temporarily for legacy helper classes; the active resolver now uses yt-dlp only.
     implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.27.1'
 
