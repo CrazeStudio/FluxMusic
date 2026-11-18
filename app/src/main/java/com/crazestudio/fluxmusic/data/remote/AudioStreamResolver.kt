@@ -175,7 +175,8 @@ object AudioStreamResolver {
                 continue
             }
 
-            val streaming = response.optJSONObject("streamingData") ?: run {
+            val streaming = response.optJSONObject("streamingData")
+            if (streaming == null) {
                 lastMessage = "YouTube did not provide streaming data. It may require a PO token or sign-in."
                 continue
             }
