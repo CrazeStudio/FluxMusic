@@ -166,7 +166,12 @@ object AudioStreamResolver {
                 .put("contentCheckOk", true)
                 .put("racyCheckOk", true)
 
-            val response = postPlayer(body.toString(), agent)
+            val response = try {
+                postPlayer(body.toString(), agent)
+            } catch (e: IOException) {
+                lastMessage = e.message ?: "YouTube player request failed."
+                continue
+            }
             val status = response.optJSONObject("playabilityStatus")
             val state = status?.optString("status").orEmpty()
             if (state.isNotBlank() && state != "OK") {
