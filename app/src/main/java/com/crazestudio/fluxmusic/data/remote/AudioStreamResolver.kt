@@ -285,9 +285,7 @@ object AudioStreamResolver {
             cachedVisionOsVisitorData?.takeIf { cachedVisionOsVisitorDataExpiry > System.currentTimeMillis() }
                 ?.let { return it }
 
-            val body = buildVisionOsRequestBody(JSONObject(client.toString()).apply {
-                remove("utcOffsetMinutes")
-            })
+            val body = buildVisionOsRequestBody(JSONObject(client.toString()))
             val response = postVisionOs(VISIONOS_VISITOR_ENDPOINT, body.toString())
             val visitorData = response.optJSONObject("responseContext")
                 ?.optString("visitorData")
