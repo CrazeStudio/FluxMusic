@@ -118,7 +118,7 @@ class MusicService : MediaSessionService() {
                 val currentId = player.currentMediaItem?.mediaId.orEmpty()
                 if (currentId.isNotBlank() && !offlineCacheMode && autoRetriedVideoId != currentId) {
                     autoRetriedVideoId = currentId
-                    AudioStreamResolver.invalidateStream(currentId)
+                    AudioStreamResolver.markPlaybackFailed(currentId)
                     val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                     player.seekTo(idx, 0L)
                     player.prepare()
@@ -180,7 +180,7 @@ class MusicService : MediaSessionService() {
                 autoRetriedVideoId != currentId
             ) {
                 autoRetriedVideoId = currentId
-                AudioStreamResolver.invalidateStream(currentId)
+                AudioStreamResolver.markPlaybackFailed(currentId)
                 val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                 player.seekTo(idx, 0L)
                 player.prepare()
@@ -370,7 +370,7 @@ class MusicService : MediaSessionService() {
                     val currentId = player.currentMediaItem?.mediaId.orEmpty()
                     if (currentId.isNotBlank()) {
                         autoRetriedVideoId = null
-                            AudioStreamResolver.invalidateStream(currentId)
+                            AudioStreamResolver.markPlaybackFailed(currentId)
                     }
                     val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                     player.seekTo(idx, 0L)
