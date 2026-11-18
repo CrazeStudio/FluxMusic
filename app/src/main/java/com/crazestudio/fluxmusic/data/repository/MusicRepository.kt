@@ -50,7 +50,8 @@ class MusicRepository(
                                     ResolvedAudioStream(
                                         url = entity.streamUrl,
                                         userAgent = taggedUserAgent.removeSuffix(AudioStreamResolver.STREAM_CACHE_TAG),
-                                        source = "cache"
+                                        source = "cache",
+                                        expiresAt = entity.expiresAt
                                     )
                                 }
                         }
