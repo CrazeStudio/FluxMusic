@@ -191,19 +191,25 @@ object AudioStreamResolver {
         try {
             if (existing == null) active.run()
             val resolved = active.get()
+            val resolvedAt = System.currentTimeMillis()
             val stamped = resolved.map { stream ->
-                stream.copy(expiresAt = calculateExpiry(stream.url, System.currentTimeMillis()))
+                stream.copy(expiresAt = calculateExpiry(stream.url, resolvedAt))
             }
-            val expiry = stamped.minOfOrNull { it.expiresAt }
-                ?: (System.currentTimeMillis() + STREAM_CACHE_TTL_MS)
+            // Never hand Media3 a URL that has already crossed its signed expiry
+            // (or the safety margin immediately before it).
+            val playable = stamped.filter { it.expiresAt > resolvedAt }
+            if (playable.isEmpty()) {
+                throw IOException("yt-dlp returned stream URLs that are already expired. Please retry.")
+            }
+            val expiry = playable.minOf { it.expiresAt }
 
             synchronized(streamCache) {
-                streamCache[key] = CacheEntry(expiry, stamped)
+                streamCache[key] = CacheEntry(expiry, playable)
                 while (streamCache.size > MAX_CACHE_ENTRIES) {
                     streamCache.keys.firstOrNull()?.let(streamCache::remove) ?: break
                 }
             }
-            return stamped.filterNot { isUrlFailed(videoId, it.url) }.ifEmpty { stamped }
+            return playable.filterNot { isUrlFailed(videoId, it.url) }.ifEmpty { playable }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
             throw IOException("yt-dlp extraction was interrupted.", e)
@@ -368,12 +374,13 @@ object AudioStreamResolver {
         return true
     }
 
-    private fun calculateExpiry(url: String, now: Long): Long {
+    internal fun calculateExpiry(url: String, now: Long): Long {
         val upstreamExpiry = runCatching {
             Uri.parse(url).getQueryParameter("expire")?.toLongOrNull()?.times(1000L)
         }.getOrNull()
-        val bounded = upstreamExpiry?.minus(45_000L) ?: (now + STREAM_CACHE_TTL_MS)
-        return minOf(bounded, now + STREAM_CACHE_TTL_MS).coerceAtLeast(now + 30_000L)
+        // A signed URL must expire from our cache before the provider's deadline.
+        // Do not extend an almost-expired URL with a minimum TTL.
+        return minOf(upstreamExpiry?.minus(45_000L) ?: (now + STREAM_CACHE_TTL_MS), now + STREAM_CACHE_TTL_MS)
     }
 
     private fun isDirectHttpsMedia(url: String): Boolean =

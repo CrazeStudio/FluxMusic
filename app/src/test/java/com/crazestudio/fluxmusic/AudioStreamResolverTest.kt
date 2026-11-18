@@ -59,4 +59,28 @@ class AudioStreamResolverTest {
         )
         assertEquals("https://example.com/low64", saverOrder.first().url)
     }
+    @Test
+    fun signedStreamExpiryUsesSafetyMarginAndNeverExtendsProviderDeadline() {
+        val now = 1_800_000_000_000L
+        val providerExpirySeconds = now / 1000L + 20L
+        val url = "https://rr1.googlevideo.com/videoplayback?expire=$providerExpirySeconds"
+
+        val expiry = AudioStreamResolver.calculateExpiry(url, now)
+
+        assertEquals(providerExpirySeconds * 1000L - 45_000L, expiry)
+        assertTrue("An almost-expired signed URL must not be extended", expiry < now)
+    }
+
+    @Test
+    fun unsignedStreamExpiryUsesBoundedInMemoryCacheTtl() {
+        val now = 1_800_000_000_000L
+
+        val expiry = AudioStreamResolver.calculateExpiry(
+            "https://example.com/audio",
+            now
+        )
+
+        assertEquals(now + AudioStreamResolver.STREAM_CACHE_TTL_MS, expiry)
+    }
+
 }
