@@ -115,7 +115,9 @@ object AudioStreamResolver {
         require(videoId.matches(VIDEO_ID_REGEX)) { "Invalid YouTube video ID." }
 
         val key = cacheKey(videoId, quality)
-        val lock = locks.computeIfAbsent(key) { Any() }
+        val lock = synchronized(locks) {
+            locks[key] ?: Any().also { locks[key] = it }
+        }
 
         synchronized(lock) {
             val now = System.currentTimeMillis()
@@ -190,20 +192,21 @@ object AudioStreamResolver {
         stream: ResolvedAudioStream
     ) {
         val key = cacheKey(videoId, quality)
-        cache.computeIfPresent(key) { _, entry ->
-            CacheEntry(
+        synchronized(cache) {
+            val entry = cache[key] ?: return@synchronized
+            cache[key] = CacheEntry(
                 listOf(stream) + entry.streams.filterNot { it.url == stream.url }
             )
         }
     }
 
     fun markCandidateFailed(videoId: String, stream: ResolvedAudioStream) {
-        cache.entries.forEach { entry ->
-            if (entry.key.startsWith("$videoId:")) {
-                cache.computeIfPresent(entry.key) { _, value ->
-                    val remaining = value.streams.filterNot { it.url == stream.url }
-                    if (remaining.isEmpty()) null else CacheEntry(remaining)
-                }
+        synchronized(cache) {
+            val matchingKeys = cache.keys.filter { it.startsWith("$videoId:") }
+            matchingKeys.forEach { key ->
+                val entry = cache[key] ?: return@forEach
+                val remaining = entry.streams.filterNot { it.url == stream.url }
+                if (remaining.isEmpty()) cache.remove(key) else cache[key] = CacheEntry(remaining)
             }
         }
         Log.w(TAG, "Discarded failed stream URL for $videoId (${stream.mimeType})")
@@ -218,7 +221,9 @@ object AudioStreamResolver {
     }
 
     fun invalidateStream(videoId: String) {
-        cache.keys.removeIf { it.startsWith("$videoId:") }
+        synchronized(cache) {
+            cache.keys.filter { it.startsWith("$videoId:") }.forEach { cache.remove(it) }
+        }
     }
 
     fun clearStreamCache() {
