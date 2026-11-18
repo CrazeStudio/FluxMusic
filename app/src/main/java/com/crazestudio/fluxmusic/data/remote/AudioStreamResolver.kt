@@ -42,7 +42,7 @@ object AudioStreamResolver {
 
     const val USER_AGENT = YtMusicCatalog.USER_AGENT
     const val VISIONOS_USER_AGENT =
-        "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; GB)"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
     const val ANDROID_VR_USER_AGENT =
         "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
     const val IOS_USER_AGENT =
@@ -404,9 +404,10 @@ object AudioStreamResolver {
         // Each provider is attempted in order; failures are isolated so one dead endpoint
         // cannot prevent the remaining extractors from being tried.
         val providers: List<Pair<String, () -> List<ResolvedAudioStream>>> = listOf(
-            // Primary path mirrors the old Flutter YoutubeExplode call:
-            // fetch the YouTube watch page, parse its player response and
-            // collect audio-only formats before trying alternate providers.
+            // Primary path is a direct Kotlin port of the old Flutter fork's
+            // watch-page + VISIONOS player-client extraction sequence.
+            "innertube_visionos" to { resolveViaInnerTubeVisionOS(videoId, quality) },
+            // NewPipe performs signature deciphering if YouTube falls back to cipher URLs.
             "newpipe" to { resolveViaNewPipe(videoId, quality) },
             "innertube_vr" to { resolveViaInnerTubeVr(videoId, quality) },
             "innertube_ios" to { resolveViaInnerTubeIos(videoId, quality) },
@@ -429,6 +430,170 @@ object AudioStreamResolver {
                 System.currentTimeMillis() + PROVIDER_BACKOFF_MS
         }
         throw IOException("No audio stream is currently available. All extraction providers failed.")
+    }
+
+    private data class WatchPageSession(
+        val cookieHeader: String,
+        val signatureTimestamp: String?,
+        val visitorData: String?
+    )
+
+    /**
+     * Kotlin port of the original FluxMusic Flutter extractor's primary path:
+     * YoutubeExplode's watch-page request followed by its logged-out VISIONOS
+     * player client. This client does not need PO tokens or JS challenge solving.
+     */
+    private fun resolveViaInnerTubeVisionOS(
+        videoId: String,
+        quality: AudioQuality
+    ): List<ResolvedAudioStream> {
+        val watchPage = fetchWatchPageSession(videoId)
+        val client = JSONObject()
+            .put("clientName", "VISIONOS")
+            .put("clientVersion", "1.02")
+            .put("deviceMake", "Apple")
+            .put("deviceModel", "RealityDevice17,1")
+            .put("userAgent", VISIONOS_USER_AGENT)
+            .put("osName", "visionOS")
+            .put("osVersion", "26.5.23O471")
+            .put("hl", "en")
+            .put("timeZone", "UTC")
+            .put("utcOffsetMinutes", 0)
+
+        val contentPlayback = JSONObject().put("html5Preference", "HTML5_PREF_WANTS")
+        watchPage.signatureTimestamp?.let { contentPlayback.put("signatureTimestamp", it) }
+        val body = JSONObject()
+            .put("context", JSONObject().put("client", client))
+            .put("videoId", videoId)
+            .put("playbackContext", JSONObject().put("contentPlaybackContext", contentPlayback))
+
+        val connection = (URL("https://www.youtube.com/youtubei/v1/player?prettyPrint=false").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 12000
+            readTimeout = 25000
+            doOutput = true
+            setRequestProperty("User-Agent", VISIONOS_USER_AGENT)
+            setRequestProperty("X-YouTube-Client-Name", "VISIONOS")
+            setRequestProperty("X-YouTube-Client-Version", "1.02")
+            setRequestProperty("Origin", "https://www.youtube.com")
+            setRequestProperty("Sec-Fetch-Mode", "navigate")
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Cookie", watchPage.cookieHeader)
+            watchPage.visitorData?.let { setRequestProperty("X-Goog-Visitor-Id", it) }
+        }
+
+        try {
+            connection.outputStream.use { output ->
+                output.write(body.toString().toByteArray(StandardCharsets.UTF_8))
+            }
+            val statusCode = connection.responseCode
+            if (statusCode !in 200..299) {
+                throw IOException("VISIONOS player request returned HTTP $statusCode")
+            }
+            val response = JSONObject(readStream(decodeInputStream(connection)))
+            val playability = response.optJSONObject("playabilityStatus")
+                ?.optString("status", "")
+                .orEmpty()
+            if (playability.isNotEmpty() && !playability.equals("OK", ignoreCase = true)) {
+                val reason = response.optJSONObject("playabilityStatus")?.optString("reason").orEmpty()
+                throw IOException("YouTube VISIONOS playback status: $playability $reason".trim())
+            }
+
+            val adaptiveFormats = response.optJSONObject("streamingData")
+                ?.optJSONArray("adaptiveFormats")
+                ?: throw IOException("VISIONOS response contained no adaptive audio formats")
+            val candidates = ArrayList<ResolvedAudioStream>()
+            for (index in 0 until adaptiveFormats.length()) {
+                val item = adaptiveFormats.optJSONObject(index) ?: continue
+                val mimeType = item.optString("mimeType", "")
+                if (!mimeType.startsWith("audio/", ignoreCase = true)) continue
+                val streamUrl = item.optString("url", "")
+                // The original VISIONOS client returns direct media URLs. Cipher-only
+                // entries are left to NewPipe's signature-aware fallback.
+                if (!streamUrl.startsWith("https://")) continue
+                val rawBitrate = item.optInt("averageBitrate", item.optInt("bitrate", 0))
+                val bitrateKbps = (if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate)
+                    .coerceAtLeast(1)
+                candidates.add(
+                    ResolvedAudioStream(
+                        url = streamUrl,
+                        userAgent = VISIONOS_USER_AGENT,
+                        source = "innertube_visionos",
+                        mimeType = mimeType.substringBefore(';'),
+                        bitrateKbps = bitrateKbps,
+                        extraHeaders = emptyMap()
+                    )
+                )
+            }
+            if (candidates.isEmpty()) {
+                throw IOException("VISIONOS player returned no direct audio-only streams")
+            }
+            return orderCandidates(candidates, quality)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun fetchWatchPageSession(videoId: String): WatchPageSession {
+        val connection = (URL("https://www.youtube.com/watch?v=$videoId&bpctr=9999999999&has_verified=1&hl=en").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 12000
+            readTimeout = 25000
+            instanceFollowRedirects = true
+            setRequestProperty(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.18 Safari/537.36"
+            )
+            setRequestProperty(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            )
+            setRequestProperty("Accept-Language", "en-us,en;q=0.5")
+            setRequestProperty("Sec-Fetch-Mode", "navigate")
+            setRequestProperty("Cookie", "PREF=hl=en&tz=UTC; SOCS=CAI; GPS=1")
+        }
+
+        try {
+            val statusCode = connection.responseCode
+            if (statusCode !in 200..299) {
+                throw IOException("YouTube watch page returned HTTP $statusCode")
+            }
+            val html = readStream(decodeInputStream(connection))
+            if (!html.contains("id=\\"player\\"", ignoreCase = true) &&
+                !html.contains("id='player'", ignoreCase = true)
+            ) {
+                throw IOException("YouTube watch page did not contain the player")
+            }
+
+            val cookieValues = connection.headerFields.entries
+                .firstOrNull { it.key.equals("Set-Cookie", ignoreCase = true) }
+                ?.value
+                .orEmpty()
+            val cookies = LinkedHashMap<String, String>()
+            cookieValues.forEach { rawCookie ->
+                val pair = rawCookie.substringBefore(';')
+                val separator = pair.indexOf('=')
+                if (separator > 0) {
+                    cookies[pair.substring(0, separator).trim()] = pair.substring(separator + 1).trim()
+                }
+            }
+            cookies.putIfAbsent("PREF", "hl=en")
+            cookies.putIfAbsent("SOCS", "CAI")
+            cookies.putIfAbsent("GPS", "1")
+
+            val sts = Regex("\\"STS\\"\\s*:\\s*(\\d+)")
+                .find(html)?.groupValues?.getOrNull(1)
+            val visitorData = Regex("\\"visitorData\\"\\s*:\\s*\\"([^\\"]+)\\"")
+                .find(html)?.groupValues?.getOrNull(1)
+            return WatchPageSession(
+                cookieHeader = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" },
+                signatureTimestamp = sts,
+                visitorData = visitorData
+            )
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun resolveViaInnerTubeVr(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
