@@ -26,8 +26,7 @@ import java.io.IOException
  */
 @OptIn(UnstableApi::class)
 class PlaybackEngine(
-    context: Context,
-    private val resolver: AudioStreamResolver
+    context: Context
 ) {
     private val appContext = context.applicationContext
 
@@ -52,9 +51,9 @@ class PlaybackEngine(
                 dataSpec
             } else {
                 if (offlineMode) throw IOException("Offline Cache Mode is enabled. Disable it to stream.")
-                val stream = resolver.resolveAudioStream(videoId, quality)
+                val stream = AudioStreamResolver.resolveAudioStream(videoId, quality)
                 // YouTube requires an rn parameter on actual media requests, not just probes.
-                val requestUrl = resolver.prepareYoutubePlaybackUrl(stream.url)
+                val requestUrl = AudioStreamResolver.prepareYoutubePlaybackUrl(stream.url)
                 val isVisionOs = stream.userAgent == AudioStreamResolver.VISIONOS_USER_AGENT
                 val headers = HashMap(dataSpec.httpRequestHeaders).apply {
                     put("User-Agent", stream.userAgent)
