@@ -8,7 +8,9 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -79,7 +81,7 @@ object AudioStreamResolver {
     private val failedUrls = ConcurrentHashMap<String, Long>()
     private val failedClients = ConcurrentHashMap<String, Long>()
     private val lastClient = ConcurrentHashMap<String, String>()
-    private val inFlight = ConcurrentHashMap<String, CompletableFuture<List<ResolvedAudioStream>>>()
+    private val inFlight = ConcurrentHashMap<String, FutureTask<List<ResolvedAudioStream>>>()
     private val worker: ExecutorService = Executors.newFixedThreadPool(2)
     private val requestCounter = AtomicLong(0L)
 
@@ -187,20 +189,24 @@ object AudioStreamResolver {
             }
         }
 
-        val mine = CompletableFuture<List<ResolvedAudioStream>>()
-        val pending = inFlight.putIfAbsent(key, mine)
-        if (pending != null) {
-            return try {
-                pending.get(35, TimeUnit.SECONDS)
-            } catch (error: Exception) {
-                throw (error.cause as? Exception)
-                    ?: IOException("A stream resolution request is already in progress", error)
-            }
+        val task = FutureTask<List<ResolvedAudioStream>> {
+            resolveWithClients(videoId, quality)
         }
+        val pending = inFlight.putIfAbsent(key, task)
+        val active = pending ?: task
 
         try {
-            val streams = resolveWithClients(videoId, quality)
-                .filterNot { isUrlFailed(videoId, it.url) }
+            if (pending == null) task.run()
+            val streams = try {
+                active.get(120, TimeUnit.SECONDS)
+            } catch (error: ExecutionException) {
+                val cause = error.cause
+                if (cause is Exception) throw cause
+                throw IOException("Stream extraction failed", error)
+            } catch (error: TimeoutException) {
+                throw IOException("Timed out while extracting this track", error)
+            }.filterNot { isUrlFailed(videoId, it.url) }
+
             if (streams.isEmpty()) {
                 throw IOException(
                     "YouTube returned no usable direct audio formats. The track may be unavailable, " +
@@ -219,13 +225,9 @@ object AudioStreamResolver {
                 }
             }
             stamped.firstOrNull()?.let { lastClient[videoId] = it.source }
-            mine.complete(stamped)
             return stamped
-        } catch (error: Exception) {
-            mine.completeExceptionally(error)
-            throw error
         } finally {
-            inFlight.remove(key, mine)
+            if (pending == null) inFlight.remove(key, task)
         }
     }
 
