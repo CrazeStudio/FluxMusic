@@ -48,10 +48,14 @@ class MusicRepository(
                             entity.userAgent
                                 .takeIf { it.endsWith(AudioStreamResolver.STREAM_CACHE_TAG) }
                                 ?.let { taggedUserAgent ->
+                                    val stored = taggedUserAgent.removeSuffix(AudioStreamResolver.STREAM_CACHE_TAG)
+                                    val separator = stored.lastIndexOf('|')
+                                    val storedAgent = if (separator > 0) stored.substring(0, separator) else stored
+                                    val source = if (separator > 0) stored.substring(separator + 1) else "cache"
                                     ResolvedAudioStream(
                                         url = entity.streamUrl,
-                                        userAgent = taggedUserAgent.removeSuffix(AudioStreamResolver.STREAM_CACHE_TAG),
-                                        source = "cache",
+                                        userAgent = storedAgent,
+                                        source = source,
                                         expiresAt = entity.expiresAt
                                     )
                                 }
@@ -67,7 +71,7 @@ class MusicRepository(
                                 videoId = videoId,
                                 quality = quality.name,
                                 streamUrl = stream.url,
-                                userAgent = stream.userAgent + AudioStreamResolver.STREAM_CACHE_TAG,
+                                userAgent = stream.userAgent + "|" + stream.source + AudioStreamResolver.STREAM_CACHE_TAG,
                                 expiresAt = expiresAt
                             )
                         )
