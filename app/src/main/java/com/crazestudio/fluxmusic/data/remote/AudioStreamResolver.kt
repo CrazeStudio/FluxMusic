@@ -485,16 +485,7 @@ object AudioStreamResolver {
             )
         }
 
-        val defaultOnly = parsed.filter { candidate ->
-            val source = formats.firstOrNull { item ->
-                item.optString("url", "") == candidate.url ||
-                    item.optString("signatureCipher", item.optString("cipher", "")).isNotBlank()
-            }
-            val audioTrack = source?.optJSONObject("audioTrack")
-            audioTrack == null || !audioTrack.has("audioIsDefault") ||
-                audioTrack.optBoolean("audioIsDefault", true)
-        }
-        return orderCandidates(if (defaultOnly.isNotEmpty()) defaultOnly else parsed, quality)
+        return orderCandidates(parsed, quality)
     }
 
     private fun decodeCipherUrl(cipher: String, playerScript: String): String? {
