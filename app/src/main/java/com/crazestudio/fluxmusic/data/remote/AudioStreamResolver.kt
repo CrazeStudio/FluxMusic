@@ -5,9 +5,6 @@ import android.net.Uri
 import android.util.Log
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import org.json.JSONObject
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.mapper.VideoInfo
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
@@ -414,84 +411,32 @@ object AudioStreamResolver {
     }
 
     private fun resolveWithFallbacks(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        if (!ytDlpReady) {
-            throw IOException("yt-dlp engine is not initialized yet. Please retry in a moment.")
-        }
+        // Restore the lightweight native extraction chain used before yt-dlp was introduced.
+        // Each provider is attempted in order; failures are isolated so one dead endpoint
+        // cannot prevent the remaining extractors from being tried.
+        val providers: List<Pair<String, () -> List<ResolvedAudioStream>>> = listOf(
+            "innertube_vr" to { resolveViaInnerTubeVr(videoId, quality) },
+            "innertube_ios" to { resolveViaInnerTubeIos(videoId, quality) },
+            "innertube_android" to { resolveViaInnerTubeAndroid(videoId, quality) },
+            "innertube_tv" to { resolveViaInnerTubeTvEmbedded(videoId, quality) },
+            "newpipe" to { resolveViaNewPipe(videoId, quality) },
+            "piped" to { resolveViaPiped(videoId, quality) },
+            "invidious" to { resolveViaInvidious(videoId, quality) }
+        )
 
-        val url = "https://www.youtube.com/watch?v=$videoId"
-        val formatSelector = when (quality) {
-            AudioQuality.HIGH -> "bestaudio/best"
-            AudioQuality.DATA_SAVER -> "bestaudio[abr<=96]/bestaudio/best"
-            AudioQuality.AUTO -> "bestaudio[abr<=160]/bestaudio/best"
-        }
-        val request = YoutubeDLRequest(url)
-            .addOption("--no-playlist")
-            .addOption("--no-warnings")
-            .addOption("--format", formatSelector)
-            .addOption("--extractor-args", "youtube:player_client=android,web")
-        val info = try {
-            YoutubeDL.getInstance().getInfo(request)
-        } catch (e: Exception) {
-            Log.e(TAG, "yt-dlp extraction failed for $videoId", e)
-            throw IOException("yt-dlp could not extract this track: ${e.message ?: "unknown extraction error"}", e)
-        }
-
-        val formats = (info.requestedFormats.orEmpty() + info.formats.orEmpty())
-            .filter { format ->
-                !format.url.isNullOrBlank() &&
-                    format.acodec?.let { it != "none" } == true &&
-                    (format.vcodec == null || format.vcodec == "none")
+        for ((source, resolver) in providers) {
+            if (!providerAvailable(videoId, source)) continue
+            val candidates = runCatching { resolver() }
+                .onFailure { Log.w(TAG, "$source extraction failed for $videoId: ${it.message}") }
+                .getOrDefault(emptyList())
+            if (candidates.isNotEmpty()) {
+                Log.i(TAG, "Resolved ${candidates.size} stream candidates via $source for $videoId")
+                return orderCandidates(candidates, quality)
             }
-            .distinctBy { it.url }
-            .sortedWith(
-                compareByDescending<com.yausername.youtubedl_android.mapper.VideoFormat> { it.abr }
-                    .thenByDescending { it.ext == "m4a" }
-            )
-
-        val candidates = formats.map { format ->
-            val headers = format.httpHeaders ?: info.httpHeaders ?: emptyMap()
-            val ua = headers.entries.firstOrNull { it.key.equals("User-Agent", true) }?.value
-                ?: USER_AGENT
-            ResolvedAudioStream(
-                url = format.url!!,
-                userAgent = ua,
-                source = "yt-dlp",
-                mimeType = when (format.ext) {
-                    "m4a" -> "audio/mp4"
-                    "webm" -> "audio/webm"
-                    else -> ""
-                },
-                bitrateKbps = format.abr.coerceAtLeast(0),
-                extraHeaders = headers.filterKeys { !it.equals("User-Agent", true) }
-            )
-        }.let { ordered ->
-            when (quality) {
-                AudioQuality.HIGH -> ordered.sortedByDescending { it.bitrateKbps }
-                AudioQuality.DATA_SAVER -> ordered.sortedBy { it.bitrateKbps }
-                AudioQuality.AUTO -> ordered.sortedBy { kotlin.math.abs(it.bitrateKbps - 128) }
-            }
+            failedProviders.computeIfAbsent(videoId) { ConcurrentHashMap() }[source] =
+                System.currentTimeMillis() + PROVIDER_BACKOFF_MS
         }
-
-        val selected = candidates.ifEmpty {
-            val directUrl = info.url
-            if (directUrl.isNullOrBlank()) emptyList() else {
-                val headers = info.httpHeaders ?: emptyMap()
-                val ua = headers.entries.firstOrNull { it.key.equals("User-Agent", true) }?.value
-                    ?: USER_AGENT
-                listOf(
-                    ResolvedAudioStream(
-                        url = directUrl,
-                        userAgent = ua,
-                        source = "yt-dlp",
-                        extraHeaders = headers.filterKeys { !it.equals("User-Agent", true) }
-                    )
-                )
-            }
-        }
-        if (selected.isEmpty()) {
-            throw IOException("yt-dlp returned no playable audio formats for this track.")
-        }
-        return selected.distinctBy { it.url }
+        throw IOException("No audio stream is currently available. All extraction providers failed.")
     }
 
     private fun resolveViaInnerTubeVr(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
