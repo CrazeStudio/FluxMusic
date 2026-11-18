@@ -560,7 +560,7 @@ object AudioStreamResolver {
                 throw IOException("YouTube watch page returned HTTP $statusCode")
             }
             val html = readStream(decodeInputStream(connection))
-            if (!html.contains("id=\\"player\\"", ignoreCase = true) &&
+            if (!html.contains("id=\"player\"", ignoreCase = true) &&
                 !html.contains("id='player'", ignoreCase = true)
             ) {
                 throw IOException("YouTube watch page did not contain the player")
@@ -582,9 +582,9 @@ object AudioStreamResolver {
             cookies.putIfAbsent("SOCS", "CAI")
             cookies.putIfAbsent("GPS", "1")
 
-            val sts = Regex("\\"STS\\"\\s*:\\s*(\\d+)")
+            val sts = Regex("\"STS\"\\s*:\\s*(\\d+)")
                 .find(html)?.groupValues?.getOrNull(1)
-            val visitorData = Regex("\\"visitorData\\"\\s*:\\s*\\"([^\\"]+)\\"")
+            val visitorData = Regex("\"visitorData\"\\s*:\\s*\"([^\"]+)\"")
                 .find(html)?.groupValues?.getOrNull(1)
             return WatchPageSession(
                 cookieHeader = cookies.entries.joinToString("; ") { "${it.key}=${it.value}" },
