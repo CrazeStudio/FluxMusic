@@ -48,14 +48,14 @@ internal object PlayerScriptDecipher {
 
         for (match in candidates) {
             val name = match.groupValues[1]
-            val body = readBraceBlock(script, match.range.last + 1) ?: continue
+            val body = readBraceBlock(script, match.range.last) ?: continue
             if (name == referencedName && body.contains("split") && body.contains("join")) {
                 return FunctionBlock(name, body)
             }
         }
         for (match in candidates) {
             val name = match.groupValues[1]
-            val body = readBraceBlock(script, match.range.last + 1) ?: continue
+            val body = readBraceBlock(script, match.range.last) ?: continue
             if (body.contains("split") && body.contains("join")) return FunctionBlock(name, body)
         }
         return null
@@ -100,7 +100,7 @@ internal object PlayerScriptDecipher {
         val methodDeclaration = Regex("""([$\w]+)\s*:\s*function\s*\([^)]*\)\s*\{""")
         val methods = LinkedHashMap<String, Operation>()
         methodDeclaration.findAll(objectBody).forEach { match ->
-            val body = readBraceBlock(objectBody, match.range.last + 1) ?: return@forEach
+            val body = readBraceBlock(objectBody, match.range.last) ?: return@forEach
             val op = when {
                 body.contains(".reverse(") -> Operation.Reverse
                 Regex("""\.splice\(\s*0\s*,""").containsMatchIn(body) -> {
