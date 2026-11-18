@@ -454,7 +454,12 @@ object AudioStreamResolver {
                 val reason = playability.optString("reason", "")
                 throw IOException("${profile.name} playback status $playabilityStatus: $reason".trim())
             }
-            parseAudioCandidates(root, profile, quality)
+            val playbackHeaders = LinkedHashMap<String, String>()
+            if (session.cookieHeader.isNotBlank()) playbackHeaders["Cookie"] = session.cookieHeader
+            if (session.visitorData.isNotBlank()) playbackHeaders["X-Goog-Visitor-Id"] = session.visitorData
+            parseAudioCandidates(root, profile, quality).map { stream ->
+                stream.copy(extraHeaders = stream.extraHeaders + playbackHeaders)
+            }
         } finally {
             connection.disconnect()
         }
@@ -489,6 +494,8 @@ object AudioStreamResolver {
             val headers = LinkedHashMap<String, String>().apply {
                 putAll(profile.headers)
                 putAll(identityHeaders)
+                put("X-YouTube-Client-Name", profile.clientId)
+                put("X-YouTube-Client-Version", profile.version)
             }
             ResolvedAudioStream(
                 url = url,
