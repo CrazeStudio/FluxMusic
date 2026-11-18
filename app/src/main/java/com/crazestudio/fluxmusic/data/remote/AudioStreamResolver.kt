@@ -198,6 +198,15 @@ object AudioStreamResolver {
         }
     }
 
+    /**
+     * True while stream extraction for this track/quality is still running.
+     * The playback service uses this to avoid restarting ExoPlayer mid-extraction.
+     */
+    fun isResolving(videoId: String, quality: AudioQuality): Boolean {
+        val prefix = "$videoId:${quality.name}"
+        return inFlightResolutions.keys.any { it == prefix || it.startsWith("$prefix:") }
+    }
+
     fun resolveAudioUrl(videoId: String, quality: AudioQuality = AudioQuality.AUTO): String =
         resolveAudioStream(videoId, quality).url
 
