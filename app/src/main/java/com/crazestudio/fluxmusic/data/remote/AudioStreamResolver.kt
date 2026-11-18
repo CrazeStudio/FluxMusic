@@ -3,11 +3,13 @@ package com.crazestudio.fluxmusic.data.remote
 import android.content.Context
 import android.net.Uri
 import com.crazestudio.fluxmusic.data.model.AudioQuality
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.security.SecureRandom
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
@@ -39,7 +41,14 @@ object AudioStreamResolver {
     const val STREAM_CACHE_TTL_MS = 4 * 60 * 1000L
 
     private const val PLAYER_ENDPOINT = "https://music.youtube.com/youtubei/v1/player?prettyPrint=false"
+    private const val VISIONOS_PLAYER_ENDPOINT = "https://youtubei.googleapis.com/youtubei/v1/player"
+    private const val VISIONOS_VISITOR_ENDPOINT = "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false"
     private const val CLIENT_VERSION = "1.20261116.01.00"
+    private const val VISIONOS_CLIENT_VERSION = "1.04"
+    private const val VISIONOS_USER_AGENT =
+        "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; IN)"
+    private const val NONCE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    private const val VISITOR_DATA_TTL_MS = 3 * 60 * 60 * 1000L
     private const val MAX_CACHE_ENTRIES = 80
     private const val FAILED_URL_BACKOFF_MS = 60_000L
 
@@ -51,6 +60,10 @@ object AudioStreamResolver {
     private val failedUrls = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
     private val streamCache = LinkedHashMap<String, CacheEntry>(64, 0.75f, true)
     private val requestNumber = AtomicLong(0L)
+    private val secureRandom = SecureRandom()
+
+    @Volatile private var cachedVisionOsVisitorData: String? = null
+    @Volatile private var cachedVisionOsVisitorDataExpiry: Long = 0L
 
     fun initialize(context: Context) {
         // Native resolver has no runtime to unpack or initialize.
@@ -148,11 +161,22 @@ object AudioStreamResolver {
     }
 
     private fun fetchPlayerStreams(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
+        var lastMessage = "YouTube did not return playable audio formats."
+
+        // Prefer the current VISIONOS player client. Current extractor client tables
+        // list it without a GVS PO-token policy and without a JavaScript player requirement.
+        try {
+            return fetchVisionOsPlayerStreams(videoId, quality)
+        } catch (e: IOException) {
+            lastMessage = e.message ?: lastMessage
+        }
+
+        // Keep the original clients as compatibility fallbacks in case YouTube changes
+        // the VISIONOS response or restricts a specific video.
         val clients = listOf(
             Triple("WEB_REMIX", CLIENT_VERSION, USER_AGENT),
             Triple("ANDROID_MUSIC", "8.10.52", "com.google.android.apps.youtube.music/8.10.52 (Linux; U; Android 12; en_US) gzip")
         )
-        var lastMessage = "YouTube did not return playable audio formats."
         for ((clientName, version, agent) in clients) {
             val client = JSONObject()
                 .put("clientName", clientName)
@@ -167,7 +191,7 @@ object AudioStreamResolver {
                 .put("racyCheckOk", true)
 
             val response = try {
-                postPlayer(body.toString(), agent)
+                postPlayer(body.toString(), agent, if (clientName == "WEB_REMIX") "67" else "21", version)
             } catch (e: IOException) {
                 lastMessage = e.message ?: "YouTube player request failed."
                 continue
@@ -179,41 +203,171 @@ object AudioStreamResolver {
                     ?: "YouTube playback is unavailable for this video ($state)."
                 continue
             }
-
-            val streaming = response.optJSONObject("streamingData")
-            if (streaming == null) {
-                lastMessage = "YouTube did not provide streaming data. It may require a PO token or sign-in."
-                continue
-            }
-            val formats = streaming.optJSONArray("adaptiveFormats")
-            val found = ArrayList<ResolvedAudioStream>()
-            if (formats != null) for (i in 0 until formats.length()) {
-                val f = formats.optJSONObject(i) ?: continue
-                val mime = f.optString("mimeType")
-                if (!mime.startsWith("audio/")) continue
-                // Only direct URLs are safe to hand to Media3. Ciphered URLs need
-                // YouTube's changing JavaScript signature algorithm and are skipped.
-                val direct = f.optString("url").takeIf { it.startsWith("https://") } ?: continue
-                val codecs = Regex("codecs=\"([^\"]+)\"").find(mime)?.groupValues?.getOrNull(1).orEmpty()
-                found += ResolvedAudioStream(
-                    url = direct,
-                    userAgent = agent,
-                    source = "YouTube Innertube ($clientName)",
-                    mimeType = mime.substringBefore(';'),
-                    bitrateKbps = (f.optInt("averageBitrate", f.optInt("bitrate", 0)) / 1000),
-                    extraHeaders = mapOf(
-                        "Origin" to "https://music.youtube.com",
-                        "Referer" to "https://music.youtube.com/"
-                    )
-                )
-            }
-            if (found.isNotEmpty()) return orderCandidates(found.distinctBy { it.url }, quality)
-            lastMessage = "YouTube returned only ciphered or token-protected formats; no direct audio URL was exposed."
+            val found = parseDirectAudioFormats(
+                response = response,
+                userAgent = agent,
+                source = "YouTube Innertube ($clientName)",
+                origin = "https://music.youtube.com",
+                cpn = null
+            )
+            if (found.isNotEmpty()) return orderCandidates(found, quality)
+            lastMessage = "YouTube returned no directly playable audio formats for $clientName."
         }
         throw IOException(lastMessage)
     }
 
-    private fun postPlayer(payload: String, userAgent: String): JSONObject {
+    private fun fetchVisionOsPlayerStreams(
+        videoId: String,
+        quality: AudioQuality
+    ): List<ResolvedAudioStream> {
+        val client = JSONObject()
+            .put("clientName", "VISIONOS")
+            .put("clientVersion", VISIONOS_CLIENT_VERSION)
+            .put("clientScreen", "WATCH")
+            .put("platform", "MOBILE")
+            .put("deviceMake", "Apple")
+            .put("deviceModel", "RealityDevice17,1")
+            .put("osName", "visionOS")
+            .put("osVersion", "26.6.0.23O770")
+            .put("hl", "en")
+            .put("gl", "IN")
+            .put("utcOffsetMinutes", 0)
+
+        val visitorData = getVisionOsVisitorData(client)
+        val cpn = randomNonce(16)
+        val playerClient = JSONObject(client.toString()).put("visitorData", visitorData)
+        val payload = buildVisionOsRequestBody(playerClient)
+            .put("videoId", videoId)
+            .put("cpn", cpn)
+            .put("contentCheckOk", true)
+            .put("racyCheckOk", true)
+
+        val endpoint = "$VISIONOS_PLAYER_ENDPOINT?prettyPrint=false&t=${randomNonce(12)}&id=$videoId"
+        val response = postVisionOs(endpoint, payload.toString())
+        val status = response.optJSONObject("playabilityStatus")
+        val state = status?.optString("status").orEmpty()
+        if (state.isNotBlank() && state != "OK") {
+            val reason = status?.optString("reason")?.takeIf { it.isNotBlank() }
+                ?: "YouTube VISIONOS playback is unavailable ($state)."
+            throw IOException(reason)
+        }
+
+        val found = parseDirectAudioFormats(
+            response = response,
+            userAgent = VISIONOS_USER_AGENT,
+            source = "YouTube Innertube (VISIONOS)",
+            origin = "https://www.youtube.com",
+            cpn = cpn
+        )
+        if (found.isEmpty()) {
+            throw IOException("YouTube VISIONOS returned no direct audio formats for this track.")
+        }
+        return orderCandidates(found, quality)
+    }
+
+    internal fun buildVisionOsRequestBody(client: JSONObject): JSONObject {
+        val request = JSONObject()
+            .put("internalExperimentFlags", JSONArray())
+            .put("useSsl", true)
+        val user = JSONObject().put("lockedSafetyMode", false)
+        val context = JSONObject()
+            .put("client", client)
+            .put("request", request)
+            .put("user", user)
+        return JSONObject().put("context", context)
+    }
+
+    private fun getVisionOsVisitorData(client: JSONObject): String {
+        val now = System.currentTimeMillis()
+        cachedVisionOsVisitorData?.takeIf { cachedVisionOsVisitorDataExpiry > now }?.let { return it }
+
+        synchronized(this) {
+            cachedVisionOsVisitorData?.takeIf { cachedVisionOsVisitorDataExpiry > System.currentTimeMillis() }
+                ?.let { return it }
+
+            val body = buildVisionOsRequestBody(JSONObject(client.toString()))
+            val response = postVisionOs(VISIONOS_VISITOR_ENDPOINT, body.toString())
+            val visitorData = response.optJSONObject("responseContext")
+                ?.optString("visitorData")
+                ?.takeIf { it.isNotBlank() }
+                ?: throw IOException("YouTube did not issue VISIONOS visitor data.")
+            cachedVisionOsVisitorData = visitorData
+            cachedVisionOsVisitorDataExpiry = System.currentTimeMillis() + VISITOR_DATA_TTL_MS
+            return visitorData
+        }
+    }
+
+    private fun postVisionOs(endpoint: String, payload: String): JSONObject {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 8_000
+            readTimeout = 12_000
+            doOutput = true
+            setRequestProperty("User-Agent", VISIONOS_USER_AGENT)
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("X-Goog-Api-Format-Version", "2")
+        }
+        try {
+            connection.outputStream.use { it.write(payload.toByteArray(StandardCharsets.UTF_8)) }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val raw = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) throw IOException("YouTube VISIONOS API HTTP $code: ${raw.take(180)}")
+            return JSONObject(raw)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun parseDirectAudioFormats(
+        response: JSONObject,
+        userAgent: String,
+        source: String,
+        origin: String,
+        cpn: String?
+    ): List<ResolvedAudioStream> {
+        val streaming = response.optJSONObject("streamingData") ?: return emptyList()
+        val formats = streaming.optJSONArray("adaptiveFormats") ?: return emptyList()
+        val found = ArrayList<ResolvedAudioStream>()
+        for (i in 0 until formats.length()) {
+            val format = formats.optJSONObject(i) ?: continue
+            val mime = format.optString("mimeType")
+            if (!mime.startsWith("audio/")) continue
+
+            // VISIONOS currently returns direct URLs for supported audio tracks.
+            // Never pass an unresolved signatureCipher field to Media3.
+            val direct = format.optString("url").takeIf { it.startsWith("https://") } ?: continue
+            val urlWithCpn = if (cpn == null || Uri.parse(direct).getQueryParameter("cpn") != null) {
+                direct
+            } else {
+                direct + (if (direct.contains("?")) "&" else "?") + "cpn=$cpn"
+            }
+            found += ResolvedAudioStream(
+                url = urlWithCpn,
+                userAgent = userAgent,
+                source = source,
+                mimeType = mime.substringBefore(';'),
+                bitrateKbps = format.optInt("averageBitrate", format.optInt("bitrate", 0)) / 1000,
+                extraHeaders = mapOf(
+                    "Origin" to origin,
+                    "Referer" to "$origin/"
+                )
+            )
+        }
+        return found.distinctBy { it.url }
+    }
+
+    private fun randomNonce(length: Int): String = buildString(length) {
+        repeat(length) { append(NONCE_ALPHABET[secureRandom.nextInt(NONCE_ALPHABET.length)]) }
+    }
+
+    private fun postPlayer(
+        payload: String,
+        userAgent: String,
+        clientId: String,
+        clientVersion: String
+    ): JSONObject {
         val connection = (URL(PLAYER_ENDPOINT).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 8_000
@@ -224,6 +378,8 @@ object AudioStreamResolver {
             setRequestProperty("Origin", "https://music.youtube.com")
             setRequestProperty("Referer", "https://music.youtube.com/")
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("X-YouTube-Client-Name", clientId)
+            setRequestProperty("X-YouTube-Client-Version", clientVersion)
         }
         try {
             connection.outputStream.use { it.write(payload.toByteArray(StandardCharsets.UTF_8)) }
