@@ -171,4 +171,72 @@ class AudioStreamResolverTest {
             ).first().url
         )
     }
+    @Test
+    fun decipherSupportsCommonReverseSwapAndDropTransforms() {
+        val script = """
+            var H = {
+              rv: function(a) { a.reverse(); },
+              sw: function(a, b) { var c = a[0]; a[0] = a[b % a.length]; a[b] = c; },
+              sl: function(a, b) { a.splice(0, b); }
+            };
+            var DE = function(a) {
+              a = a.split("");
+              H.rv(a);
+              H.sw(a, 2);
+              H.sl(a, 1);
+              return a.join("");
+            };
+            x.sig || DE(x.s)
+        """.trimIndent()
+
+        assertEquals("efcba", PlayerScriptDecipher.decipher("abcdef", script))
+    }
+
+    @Test
+    fun decipherFailsClosedForUnknownPlayerCode() {
+        assertEquals(null, PlayerScriptDecipher.decipher("abcdef", "function player(x) { return x; }"))
+    }
+
+    @Test
+    fun parserResolvesSignatureCipherUsingPlayerScript() {
+        val script = """
+            var H = {
+              rv: function(a) { a.reverse(); },
+              sw: function(a, b) { var c = a[0]; a[0] = a[b % a.length]; a[b] = c; },
+              sl: function(a, b) { a.splice(0, b); }
+            };
+            var DE = function(a) {
+              a = a.split("");
+              H.rv(a);
+              H.sw(a, 2);
+              H.sl(a, 1);
+              return a.join("");
+            };
+            x.sig || DE(x.s)
+        """.trimIndent()
+        val cipher = "url=https%3A%2F%2Frr1.googlevideo.com%2Fvideoplayback%3Fitag%3D251&s=abcdef&sp=sig"
+        val response = JSONObject().put(
+            "streamingData",
+            JSONObject().put(
+                "adaptiveFormats",
+                org.json.JSONArray().put(
+                    JSONObject()
+                        .put("mimeType", "audio/webm; codecs=\"opus\"")
+                        .put("signatureCipher", cipher)
+                        .put("bitrate", 160000)
+                )
+            )
+        )
+
+        val candidates = AudioStreamResolver.parseAudioCandidates(
+            response,
+            androidProfile,
+            AudioQuality.AUTO,
+            script
+        )
+
+        assertEquals(1, candidates.size)
+        assertTrue(candidates.single().url.contains("sig=efcba"))
+    }
+
 }

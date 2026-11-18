@@ -1,0 +1,369 @@
+package com.crazestudio.fluxmusic.playback
+
+import android.content.ComponentName
+import android.content.Context
+import android.os.Bundle
+import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionToken
+import com.crazestudio.fluxmusic.data.model.EqualizerPreset
+import com.crazestudio.fluxmusic.data.model.Track
+import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+data class PlaybackUiState(
+    val isConnected: Boolean = false,
+    val activeTrack: Track? = null,
+    val queue: List<Track> = emptyList(),
+    val currentIndex: Int = -1,
+    val sourceLabel: String = "FluxMusic",
+    val isPlaying: Boolean = false,
+    val isBuffering: Boolean = false,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L,
+    val shuffleEnabled: Boolean = false,
+    val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val playbackSpeed: Float = 1.0f,
+    val sleepRemainingSec: Int = 0,
+    val sleepEndOfTrack: Boolean = false,
+    val equalizer: EqualizerState = EqualizerState(),
+    val playbackError: String? = null
+)
+
+class PlaybackController(
+    context: Context,
+    private val onTrackStarted: (Track) -> Unit
+) : Player.Listener, MediaController.Listener {
+
+    private val appContext = context.applicationContext
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    private val _state = MutableStateFlow(PlaybackUiState())
+    val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
+
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var controller: MediaController? = null
+    private var queueManager: PlaybackQueueManager? = null
+    private var tickerJob: Job? = null
+    private var pendingPlayRequest: Triple<List<Track>, Int, String>? = null
+    private var serviceAutoRetrying: Boolean = false
+
+    fun connect() {
+        if (controllerFuture != null) return
+        val token = SessionToken(appContext, ComponentName(appContext, MusicService::class.java))
+        val future = MediaController.Builder(appContext, token)
+            .setListener(this)
+            .buildAsync()
+        controllerFuture = future
+        future.addListener({
+            try {
+                val c = future.get()
+                controller = c
+                queueManager = PlaybackQueueManager(c)
+                c.addListener(this)
+                _state.update { it.copy(isConnected = true) }
+                syncFromPlayer()
+                sendCustomCommand(MusicService.CMD_SYNC_EXTRAS, Bundle.EMPTY)
+                startTicker()
+                pendingPlayRequest?.let { (tracks, idx, label) ->
+                    pendingPlayRequest = null
+                    playQueue(tracks, idx, label)
+                }
+            } catch (e: Exception) {
+                controllerFuture = null
+                controller = null
+                _state.update {
+                    it.copy(isConnected = false, playbackError = "Could not connect to playback service.")
+                }
+            }
+        }, ContextCompat.getMainExecutor(appContext))
+    }
+
+    private fun startTicker() {
+        tickerJob?.cancel()
+        tickerJob = scope.launch {
+            while (true) {
+                controller?.let { c ->
+                    if (c.isPlaying || c.playbackState == Player.STATE_BUFFERING) {
+                        val dur = c.duration.takeIf { it > 0L } ?: _state.value.activeTrack?.durationMs ?: 0L
+                        val pos = c.currentPosition.coerceAtLeast(0L)
+                        _state.update { it.copy(positionMs = pos, durationMs = dur) }
+                    }
+                }
+                delay(500L)
+            }
+        }
+    }
+
+    private fun syncFromPlayer() {
+        val c = controller ?: return
+        val queueItems = (0 until c.mediaItemCount).map { idx ->
+            Track.fromMediaItem(c.getMediaItemAt(idx))
+        }
+        val activeIdx = c.currentMediaItemIndex.takeIf { it in queueItems.indices } ?: -1
+        val activeTrack = queueItems.getOrNull(activeIdx)
+        val duration = c.duration.takeIf { it > 0L } ?: activeTrack?.durationMs ?: 0L
+        val isStartingUp = c.playWhenReady && c.playbackState == Player.STATE_IDLE && c.playerError == null
+        _state.update {
+            it.copy(
+                activeTrack = activeTrack ?: it.activeTrack,
+                queue = if (queueItems.isNotEmpty()) queueItems else it.queue,
+                currentIndex = if (activeIdx >= 0) activeIdx else it.currentIndex,
+                isPlaying = c.isPlaying,
+                isBuffering = c.playbackState == Player.STATE_BUFFERING || isStartingUp || serviceAutoRetrying,
+                positionMs = c.currentPosition.coerceAtLeast(0L),
+                durationMs = duration,
+                shuffleEnabled = c.shuffleModeEnabled,
+                repeatMode = c.repeatMode,
+                playbackSpeed = c.playbackParameters.speed
+            )
+        }
+    }
+
+    fun playQueue(tracks: List<Track>, startIndex: Int, sourceLabel: String) {
+        if (tracks.isEmpty()) return
+        val safeIdx = startIndex.coerceIn(0, tracks.lastIndex)
+        val selected = tracks[safeIdx]
+        _state.update {
+            it.copy(
+                activeTrack = selected,
+                queue = tracks,
+                currentIndex = safeIdx,
+                sourceLabel = sourceLabel,
+                isBuffering = true,
+                positionMs = 0L,
+                durationMs = selected.durationMs,
+                playbackError = null
+            )
+        }
+        val c = controller
+        if (c == null) {
+            pendingPlayRequest = Triple(tracks, safeIdx, sourceLabel)
+            connect()
+            return
+        }
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.replaceQueue(tracks, safeIdx)
+        syncFromPlayer()
+        onTrackStarted(selected)
+    }
+
+    fun retryCurrent() {
+        if (controller == null) return
+        _state.update { it.copy(playbackError = null, isBuffering = true) }
+        // MusicService owns stream-cache invalidation and the single retry.
+        // Calling prepare() here as well used to race the service and cancel its reload.
+        sendCustomCommand(MusicService.CMD_RETRY_FRESH, Bundle.EMPTY)
+    }
+
+    fun playNext(track: Track) {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.playNext(track)
+        syncFromPlayer()
+    }
+
+    fun addToQueue(track: Track) {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.addToEnd(track)
+        syncFromPlayer()
+    }
+
+    fun moveQueueItem(fromIndex: Int, toIndex: Int) {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.move(fromIndex, toIndex)
+        syncFromPlayer()
+    }
+
+    fun removeQueueItem(index: Int) {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.remove(index)
+        syncFromPlayer()
+    }
+
+    fun clearUpcomingQueue() {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.clearUpcoming()
+        syncFromPlayer()
+    }
+
+    fun jumpToQueueIndex(index: Int) {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.jumpTo(index)
+        syncFromPlayer()
+    }
+
+    fun togglePlayPause() {
+        val c = controller ?: return
+        if (c.isPlaying) c.pause() else c.play()
+        syncFromPlayer()
+    }
+
+    fun seekTo(positionMs: Long) {
+        val c = controller ?: return
+        c.seekTo(positionMs.coerceAtLeast(0L))
+        _state.update { it.copy(positionMs = positionMs.coerceAtLeast(0L)) }
+    }
+
+    fun skipNext() {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.skipNext()
+        syncFromPlayer()
+    }
+
+    fun skipPrevious() {
+        val c = controller ?: return
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.skipPrevious()
+        syncFromPlayer()
+    }
+
+    fun toggleShuffle() {
+        val c = controller ?: return
+        c.shuffleModeEnabled = !c.shuffleModeEnabled
+        syncFromPlayer()
+    }
+
+    fun cycleRepeatMode() {
+        val c = controller ?: return
+        c.repeatMode = when (c.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        syncFromPlayer()
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clamped = speed.coerceIn(0.5f, 2.0f)
+        _state.update { it.copy(playbackSpeed = clamped) }
+        sendCustomCommand(MusicService.CMD_SET_SPEED, Bundle().apply {
+            putFloat(MusicService.ARG_SPEED, clamped)
+        })
+    }
+
+    fun setEqEnabled(enabled: Boolean) {
+        sendCustomCommand(MusicService.CMD_SET_EQ_ENABLED, Bundle().apply {
+            putBoolean(MusicService.ARG_EQ_ENABLED, enabled)
+        })
+    }
+
+    fun setEqBand(index: Int, levelMb: Int) {
+        sendCustomCommand(MusicService.CMD_SET_EQ_BAND, Bundle().apply {
+            putInt(MusicService.ARG_EQ_BAND_INDEX, index)
+            putInt(MusicService.ARG_EQ_BAND_LEVEL, levelMb)
+        })
+    }
+
+    fun applyEqPreset(preset: EqualizerPreset) {
+        sendCustomCommand(MusicService.CMD_SET_EQ_PRESET, Bundle().apply {
+            putString(MusicService.ARG_EQ_PRESET, preset.name)
+        })
+    }
+
+    fun setBassBoost(strength: Int) {
+        sendCustomCommand(MusicService.CMD_SET_BASS_BOOST, Bundle().apply {
+            putInt(MusicService.ARG_BASS_STRENGTH, strength.coerceIn(0, 1000))
+        })
+    }
+
+    fun setSleepTimer(minutes: Int, endOfTrack: Boolean = false) {
+        sendCustomCommand(MusicService.CMD_SET_SLEEP_TIMER, Bundle().apply {
+            putInt(MusicService.ARG_SLEEP_MINUTES, minutes)
+            putBoolean(MusicService.ARG_SLEEP_END_OF_TRACK, endOfTrack)
+        })
+    }
+
+    fun clearError() {
+        _state.update { it.copy(playbackError = null) }
+    }
+
+    private fun sendCustomCommand(action: String, args: Bundle) {
+        controller?.sendCustomCommand(SessionCommand(action, Bundle.EMPTY), args)
+    }
+
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        syncFromPlayer()
+        mediaItem?.let { onTrackStarted(Track.fromMediaItem(it)) }
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        syncFromPlayer()
+        if (isPlaying) {
+            _state.update { it.copy(playbackError = null, isBuffering = false) }
+        }
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+        syncFromPlayer()
+        if (playbackState == Player.STATE_READY) {
+            _state.update { it.copy(playbackError = null, isBuffering = false) }
+        } else if (playbackState == Player.STATE_BUFFERING && controller?.playerError == null) {
+            _state.update { it.copy(playbackError = null, isBuffering = true) }
+        }
+    }
+
+    override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+        syncFromPlayer()
+    }
+
+    override fun onRepeatModeChanged(repeatMode: Int) {
+        syncFromPlayer()
+    }
+
+    override fun onPlayerError(error: PlaybackException) {
+        if (serviceAutoRetrying) {
+            _state.update { it.copy(playbackError = null, isBuffering = true) }
+            return
+        }
+        val msg = error.cause?.message ?: error.message ?: "Unable to stream this track right now."
+        _state.update { it.copy(playbackError = msg, isBuffering = false) }
+    }
+
+    override fun onExtrasChanged(controller: MediaController, extras: Bundle) {
+        val eq = EqualizerState.fromBundle(extras)
+        val sleepSec = extras.getInt(MusicService.EXTRA_SLEEP_REMAINING_SEC, 0)
+        val sleepEnd = extras.getBoolean(MusicService.EXTRA_SLEEP_END_OF_TRACK, false)
+        val speed = extras.getFloat(MusicService.EXTRA_SPEED, _state.value.playbackSpeed)
+        serviceAutoRetrying = extras.getBoolean(MusicService.EXTRA_AUTO_RETRYING, false)
+        _state.update {
+            it.copy(
+                equalizer = eq,
+                sleepRemainingSec = sleepSec,
+                sleepEndOfTrack = sleepEnd,
+                playbackSpeed = speed,
+                isBuffering = if (serviceAutoRetrying) true else it.isBuffering,
+                playbackError = if (serviceAutoRetrying) null else it.playbackError
+            )
+        }
+    }
+
+    fun release() {
+        tickerJob?.cancel()
+        scope.coroutineContext[Job]?.cancel()
+        controller?.removeListener(this)
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        controllerFuture = null
+        controller = null
+        queueManager = null
+    }
+}
