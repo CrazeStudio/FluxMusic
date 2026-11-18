@@ -55,7 +55,7 @@ object AudioStreamResolver {
     private const val WATCH_URL = "https://www.youtube.com/watch?v="
     private const val PLAYER_ENDPOINT = "https://www.youtube.com/youtubei/v1/player"
     private const val DEFAULT_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11Gjw"
-    private const val MAX_WATCH_PAGE_BYTES = 2 * 1024 * 1024
+    private const val MAX_WATCH_PAGE_BYTES = 6 * 1024 * 1024
     private const val MAX_PLAYER_RESPONSE_BYTES = 2 * 1024 * 1024
     private const val URL_BACKOFF_MS = 90_000L
     private const val CLIENT_BACKOFF_MS = 60_000L
@@ -390,7 +390,11 @@ object AudioStreamResolver {
         return listOf(
             ClientProfile(
                 "VISIONOS", "1.02", "101", VISIONOS_USER_AGENT, visionOs,
-                mapOf("Origin" to "https://www.youtube.com", "Referer" to "https://www.youtube.com/")
+                mapOf(
+                    "Origin" to "https://www.youtube.com",
+                    "Referer" to "https://www.youtube.com/",
+                    "Sec-Fetch-Mode" to "navigate"
+                )
             ),
             ClientProfile(
                 "ANDROID_VR", "1.60.19", "28", ANDROID_VR_USER_AGENT, androidVr
@@ -421,6 +425,9 @@ object AudioStreamResolver {
         val client = JSONObject(profile.client.toString())
         if (session.visitorData.isNotBlank()) client.put("visitorData", session.visitorData)
         val context = JSONObject().put("client", client)
+        if (profile.name.startsWith("TVHTML5")) {
+            context.put("thirdParty", JSONObject().put("embedUrl", "https://www.youtube.com/"))
+        }
         val body = JSONObject()
             .put("videoId", videoId)
             .put("context", context)
@@ -452,6 +459,7 @@ object AudioStreamResolver {
             setRequestProperty("X-YouTube-Client-Version", profile.version)
             setRequestProperty("Origin", profile.headers["Origin"] ?: "https://www.youtube.com")
             setRequestProperty("Referer", profile.headers["Referer"] ?: "https://www.youtube.com/")
+            profile.headers.forEach { (name, value) -> setRequestProperty(name, value) }
             if (session.visitorData.isNotBlank()) {
                 setRequestProperty("X-Goog-Visitor-Id", session.visitorData)
             }
