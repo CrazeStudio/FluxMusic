@@ -9,7 +9,6 @@ import com.crazestudio.fluxmusic.data.local.db.PlaylistSummary
 import com.crazestudio.fluxmusic.data.local.db.RecentPlayEntity
 import com.crazestudio.fluxmusic.data.local.db.SearchHistoryEntity
 import com.crazestudio.fluxmusic.data.local.db.StreamCacheDao
-import com.crazestudio.fluxmusic.data.local.db.StreamCacheEntity
 import com.crazestudio.fluxmusic.data.local.db.TrackDao
 import com.crazestudio.fluxmusic.data.local.db.TrackEntity
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferences
@@ -21,7 +20,6 @@ import com.crazestudio.fluxmusic.data.model.ThemeMode
 import com.crazestudio.fluxmusic.data.model.Track
 import com.crazestudio.fluxmusic.data.model.TrackLyrics
 import com.crazestudio.fluxmusic.data.remote.LrcLibClient
-import com.crazestudio.fluxmusic.data.remote.ResolvedAudioStream
 import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
 import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import kotlinx.coroutines.Dispatchers
@@ -39,55 +37,6 @@ class MusicRepository(
     private val lyricsDao: LyricsDao,
     private val prefsRepo: UserPreferencesRepository
 ) {
-    init {
-        AudioStreamResolver.attachPersistentStreamStore(
-            reader = { videoId, quality ->
-                runCatching {
-                    runBlocking {
-                        streamCacheDao.getValidStream(videoId, quality.name)?.let { entity ->
-                            entity.userAgent
-                                .takeIf { it.endsWith(AudioStreamResolver.STREAM_CACHE_TAG) }
-                                ?.let { taggedUserAgent ->
-                                    val stored = taggedUserAgent.removeSuffix(AudioStreamResolver.STREAM_CACHE_TAG)
-                                    val separator = stored.lastIndexOf('|')
-                                    val storedAgent = if (separator > 0) stored.substring(0, separator) else stored
-                                    val source = if (separator > 0) stored.substring(separator + 1) else "cache"
-                                    ResolvedAudioStream(
-                                        url = entity.streamUrl,
-                                        userAgent = storedAgent,
-                                        source = source,
-                                        expiresAt = entity.expiresAt
-                                    )
-                                }
-                        }
-                    }
-                }.getOrNull()
-            },
-            writer = { videoId, quality, stream, expiresAt ->
-                runCatching {
-                    runBlocking {
-                        streamCacheDao.upsertStream(
-                            StreamCacheEntity(
-                                videoId = videoId,
-                                quality = quality.name,
-                                streamUrl = stream.url,
-                                userAgent = stream.userAgent + "|" + stream.source + AudioStreamResolver.STREAM_CACHE_TAG,
-                                expiresAt = expiresAt
-                            )
-                        )
-                    }
-                }
-            },
-            invalidator = { videoId ->
-                runCatching {
-                    runBlocking {
-                        streamCacheDao.deleteByVideoId(videoId)
-                    }
-                }
-            }
-        )
-    }
-
     val preferences: Flow<UserPreferences> = prefsRepo.preferencesFlow
 
     val cachedTracks: Flow<List<Track>> = trackDao.observeCachedTracks()
