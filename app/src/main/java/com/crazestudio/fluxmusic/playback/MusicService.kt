@@ -86,9 +86,6 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val app = application as FluxApplication
-        // Ensure persistent stream cache store is attached even if service starts before MainActivity.
-        app.repository
-
         engine = PlaybackEngine(this)
         player = engine.createPlayer()
 
