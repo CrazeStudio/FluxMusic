@@ -60,6 +60,32 @@ class AudioStreamResolverTest {
         assertEquals("https://example.com/low64", saverOrder.first().url)
     }
     @Test
+    fun visionOsRequestBodyContainsCompleteClientAndPlaybackContext() {
+        val client = org.json.JSONObject()
+            .put("clientName", "VISIONOS")
+            .put("clientVersion", "1.04")
+            .put("clientScreen", "WATCH")
+            .put("platform", "MOBILE")
+            .put("deviceMake", "Apple")
+            .put("deviceModel", "RealityDevice17,1")
+            .put("osName", "visionOS")
+            .put("osVersion", "26.6.0.23O770")
+            .put("hl", "en")
+            .put("gl", "IN")
+            .put("utcOffsetMinutes", 0)
+            .put("visitorData", "visitor-token")
+
+        val body = AudioStreamResolver.buildVisionOsRequestBody(client)
+        val context = body.getJSONObject("context")
+
+        assertEquals("VISIONOS", context.getJSONObject("client").getString("clientName"))
+        assertEquals("visitor-token", context.getJSONObject("client").getString("visitorData"))
+        assertTrue(context.getJSONObject("request").getBoolean("useSsl"))
+        assertFalse(context.getJSONObject("user").getBoolean("lockedSafetyMode"))
+        assertEquals(0, context.getJSONObject("request").getJSONArray("internalExperimentFlags").length())
+    }
+
+    @Test
     fun signedStreamExpiryUsesSafetyMarginAndNeverExtendsProviderDeadline() {
         val now = 1_800_000_000_000L
         val providerExpirySeconds = now / 1000L + 20L
