@@ -1,9 +1,13 @@
 package com.crazestudio.fluxmusic.data.remote
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import org.json.JSONObject
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.yausername.youtubedl_android.mapper.VideoInfo
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
@@ -80,6 +84,17 @@ object AudioStreamResolver {
 
     @Volatile
     private var extractorReady = false
+
+    @Volatile
+    private var ytDlpReady = false
+
+    @Synchronized
+    fun initializeYtDlp(context: Context) {
+        if (ytDlpReady) return
+        YoutubeDL.getInstance().init(context.applicationContext)
+        ytDlpReady = true
+        Log.i(TAG, "yt-dlp engine initialized")
+    }
 
     @Volatile
     private var persistentReader: ((videoId: String, quality: AudioQuality) -> ResolvedAudioStream?)? = null
@@ -399,52 +414,84 @@ object AudioStreamResolver {
     }
 
     private fun resolveWithFallbacks(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        val collected = ArrayList<ResolvedAudioStream>()
+        if (!ytDlpReady) {
+            throw IOException("yt-dlp engine is not initialized yet. Please retry in a moment.")
+        }
 
-        fun collectFrom(source: String, block: () -> List<ResolvedAudioStream>) {
-            if (!providerAvailable(videoId, source)) return
-            val list = block().filter { !isUrlFailed(videoId, it.url) }
-            if (list.isNotEmpty()) {
-                collected.addAll(list)
+        val url = "https://www.youtube.com/watch?v=$videoId"
+        val formatSelector = when (quality) {
+            AudioQuality.HIGH -> "bestaudio/best"
+            AudioQuality.DATA_SAVER -> "bestaudio[abr<=96]/bestaudio/best"
+            AudioQuality.AUTO -> "bestaudio[abr<=160]/bestaudio/best"
+        }
+        val request = YoutubeDLRequest(url)
+            .addOption("--no-playlist")
+            .addOption("--no-warnings")
+            .addOption("--format", formatSelector)
+            .addOption("--extractor-args", "youtube:player_client=android,web")
+        val info = try {
+            YoutubeDL.getInstance().getInfo(request)
+        } catch (e: Exception) {
+            Log.e(TAG, "yt-dlp extraction failed for $videoId", e)
+            throw IOException("yt-dlp could not extract this track: ${e.message ?: "unknown extraction error"}", e)
+        }
+
+        val formats = (info.requestedFormats.orEmpty() + info.formats.orEmpty())
+            .filter { format ->
+                !format.url.isNullOrBlank() &&
+                    format.acodec?.let { it != "none" } == true &&
+                    (format.vcodec == null || format.vcodec == "none")
+            }
+            .distinctBy { it.url }
+            .sortedWith(
+                compareByDescending<com.yausername.youtubedl_android.mapper.VideoFormat> { it.abr }
+                    .thenByDescending { it.ext == "m4a" }
+            )
+
+        val candidates = formats.map { format ->
+            val headers = format.httpHeaders ?: info.httpHeaders ?: emptyMap()
+            val ua = headers.entries.firstOrNull { it.key.equals("User-Agent", true) }?.value
+                ?: USER_AGENT
+            ResolvedAudioStream(
+                url = format.url!!,
+                userAgent = ua,
+                source = "yt-dlp",
+                mimeType = when (format.ext) {
+                    "m4a" -> "audio/mp4"
+                    "webm" -> "audio/webm"
+                    else -> ""
+                },
+                bitrateKbps = format.abr.coerceAtLeast(0),
+                extraHeaders = headers.filterKeys { !it.equals("User-Agent", true) }
+            )
+        }.let { ordered ->
+            when (quality) {
+                AudioQuality.HIGH -> ordered.sortedByDescending { it.bitrateKbps }
+                AudioQuality.DATA_SAVER -> ordered.sortedBy { it.bitrateKbps }
+                AudioQuality.AUTO -> ordered.sortedBy { kotlin.math.abs(it.bitrateKbps - 128) }
             }
         }
 
-        // 1. Direct InnerTube ANDROID_VR: fast single-POST JSON, no PoToken/JS decryption required.
-        collectFrom("innertube_vr") { resolveViaInnerTubeVr(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 2. NewPipeExtractor multi-client extraction.
-        collectFrom("newpipe") { resolveViaNewPipe(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 3. Direct InnerTube iOS / Android / Embedded TV player fallbacks.
-        collectFrom("innertube_ios") { resolveViaInnerTubeIos(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        collectFrom("innertube_android") { resolveViaInnerTubeAndroid(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        collectFrom("innertube_tv") { resolveViaInnerTubeTvEmbedded(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 4. Piped proxy backups.
-        collectFrom("piped") { resolveViaPiped(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 5. Invidious backups (using local=true proxy streams).
-        collectFrom("invidious") { resolveViaInvidious(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // If every provider is currently in backoff, clear backoff once and retry ANDROID_VR + NewPipe cleanly.
-        val hadBackoff = failedProviders.remove(videoId) != null
-        failedUrls.remove(videoId)
-        if (hadBackoff) {
-            val recovery = (resolveViaInnerTubeVr(videoId, quality) + resolveViaNewPipe(videoId, quality))
-                .distinctBy { it.url }
-            if (recovery.isNotEmpty()) return recovery
+        val selected = candidates.ifEmpty {
+            val directUrl = info.url
+            if (directUrl.isNullOrBlank()) emptyList() else {
+                val headers = info.httpHeaders ?: emptyMap()
+                val ua = headers.entries.firstOrNull { it.key.equals("User-Agent", true) }?.value
+                    ?: USER_AGENT
+                listOf(
+                    ResolvedAudioStream(
+                        url = directUrl,
+                        userAgent = ua,
+                        source = "yt-dlp",
+                        extraHeaders = headers.filterKeys { !it.equals("User-Agent", true) }
+                    )
+                )
+            }
         }
-
-        throw IOException("No audio stream is currently available from YouTube or fallback providers. Please retry.")
+        if (selected.isEmpty()) {
+            throw IOException("yt-dlp returned no playable audio formats for this track.")
+        }
+        return selected.distinctBy { it.url }
     }
 
     private fun resolveViaInnerTubeVr(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
