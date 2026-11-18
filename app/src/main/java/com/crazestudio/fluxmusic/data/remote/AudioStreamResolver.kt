@@ -263,7 +263,7 @@ object AudioStreamResolver {
                 requestPlayer(videoId, quality, profile, session)
             }.onFailure {
                 Log.w(TAG, "${profile.name} player request failed: ${it.message}")
-            }.getOrDefault(emptyList())
+            }.getOrDefault(emptyList()).filterNot { isUrlFailed(videoId, it.url) }
 
             if (candidates.isNotEmpty()) {
                 failedClients.remove(clientFailureKey)
