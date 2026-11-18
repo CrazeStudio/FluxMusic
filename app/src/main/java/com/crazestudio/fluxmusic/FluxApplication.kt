@@ -22,7 +22,7 @@ class FluxApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // yt-dlp runs locally inside the app; no external service or Termux install is required.
-        AudioStreamResolver.initializeYtDlp(this)
+        // Warm up the lightweight native extractors without blocking app startup.
+        AudioStreamResolver.warmUp()
     }
 }
