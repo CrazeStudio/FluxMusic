@@ -96,7 +96,7 @@ internal object PlayerScriptDecipher {
     private fun parseHelperObject(script: String, name: String): Map<String, Operation> {
         val assignmentPattern = """(?:var\s+)?""" + Regex.escape(name) + """\s*=\s*\{"""
         val assignment = Regex(assignmentPattern).find(script) ?: return emptyMap()
-        val objectBody = readBraceBlock(script, assignment.range.last + 1) ?: return emptyMap()
+        val objectBody = readBraceBlock(script, assignment.range.last) ?: return emptyMap()
         val methodDeclaration = Regex("""([$\w]+)\s*:\s*function\s*\([^)]*\)\s*\{""")
         val methods = LinkedHashMap<String, Operation>()
         methodDeclaration.findAll(objectBody).forEach { match ->
