@@ -23,7 +23,8 @@ import java.util.concurrent.atomic.AtomicLong
 data class ResolvedAudioStream(
     val url: String,
     val userAgent: String,
-    val source: String = "youtube"
+    val source: String = "youtube",
+    val expiresAt: Long = 0L
 )
 
 /**
@@ -152,9 +153,12 @@ object AudioStreamResolver {
                     streamCache.remove(key)
                 }
             }
-            persistentReader?.invoke(videoId, quality)?.takeIf { it.url.startsWith("https://") }?.let { cached ->
+            persistentReader?.invoke(videoId, quality)?.takeIf {
+                it.url.startsWith("https://") && (it.expiresAt == 0L || it.expiresAt > now)
+            }?.let { cached ->
+                val expiry = cached.expiresAt.takeIf { it > now } ?: (now + 5 * 60 * 1000L)
                 synchronized(streamCache) {
-                    streamCache[key] = StreamCacheEntry(now + 5 * 60 * 1000L, cached)
+                    streamCache[key] = StreamCacheEntry(expiry, cached)
                 }
                 return cached
             }
@@ -171,13 +175,14 @@ object AudioStreamResolver {
         try {
             val resolved = resolveWithFallbacks(videoId, quality)
             val expiresAt = cacheExpiry(resolved, System.currentTimeMillis())
+            val cachedStream = resolved.copy(expiresAt = expiresAt)
             synchronized(streamCache) {
-                streamCache[key] = StreamCacheEntry(expiresAt, resolved)
+                streamCache[key] = StreamCacheEntry(expiresAt, cachedStream)
                 while (streamCache.size > 100) streamCache.remove(streamCache.keys.firstOrNull())
             }
-            runCatching { persistentWriter?.invoke(videoId, quality, resolved, expiresAt) }
-            mine.complete(resolved)
-            return resolved
+            runCatching { persistentWriter?.invoke(videoId, quality, cachedStream, expiresAt) }
+            mine.complete(cachedStream)
+            return cachedStream
         } catch (e: Exception) {
             mine.completeExceptionally(e)
             throw e
