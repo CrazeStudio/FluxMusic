@@ -68,7 +68,7 @@ object AudioStreamResolver {
         val playerJsUrl: String = ""
     )
 
-    private data class ClientProfile(
+    internal data class ClientProfile(
         val name: String,
         val version: String,
         val clientId: String,
@@ -120,7 +120,7 @@ object AudioStreamResolver {
         val kept = url.substring(queryAt + 1).split('&').filter { part ->
             part.isNotEmpty() && !part.substringBefore('=').equals("rn", ignoreCase = true)
         }
-        if (kept.isEmpty()) "$base?rn=$nextRn" else "$base?\${kept.joinToString("&")}&rn=$nextRn"
+        if (kept.isEmpty()) "$base?rn=$nextRn" else "$base?${kept.joinToString("&")}&rn=$nextRn"
     }.getOrDefault(url)
 
     fun resolveIdentityForUrl(url: String, fallbackUa: String = USER_AGENT): Pair<String, Map<String, String>> {
@@ -238,7 +238,7 @@ object AudioStreamResolver {
         }
     }
 
-    private fun cacheKey(videoId: String, quality: AudioQuality) = "$videoId:\${quality.name}"
+    private fun cacheKey(videoId: String, quality: AudioQuality) = "$videoId:${quality.name}"
 
     private fun hasFreshCache(videoId: String, quality: AudioQuality): Boolean {
         synchronized(streamCache) {
@@ -261,19 +261,19 @@ object AudioStreamResolver {
             val candidates = runCatching {
                 requestPlayer(videoId, quality, profile, session)
             }.onFailure {
-                Log.w(TAG, "\${profile.name} player request failed: \${it.message}")
+                Log.w(TAG, "${profile.name} player request failed: ${it.message}")
             }.getOrDefault(emptyList())
 
             if (candidates.isNotEmpty()) {
                 failedClients.remove(profile.name)
-                Log.i(TAG, "Resolved \${candidates.size} direct audio candidates using \${profile.name}")
+                Log.i(TAG, "Resolved ${candidates.size} direct audio candidates using ${profile.name}")
                 return orderCandidates(candidates, quality)
             }
             failedClients[profile.name] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
             failures.add(profile.name)
         }
 
-        Log.w(TAG, "No direct audio format for $videoId; clients attempted=\${failures.joinToString()}")
+        Log.w(TAG, "No direct audio format for $videoId; clients attempted=${failures.joinToString()}")
         return emptyList()
     }
 
@@ -326,7 +326,7 @@ object AudioStreamResolver {
 
             WatchSession(apiKey, visitorData, cookies, signatureTimestamp, playerJs)
         } catch (error: Exception) {
-            Log.w(TAG, "Watch session discovery failed: \${error.message}")
+            Log.w(TAG, "Watch session discovery failed: ${error.message}")
             WatchSession()
         } finally {
             connection.disconnect()
@@ -445,14 +445,14 @@ object AudioStreamResolver {
             val responseStream = if (status in 200..299) connection.inputStream else connection.errorStream
             val responseText = readText(responseStream, MAX_PLAYER_RESPONSE_BYTES)
             if (status !in 200..299) {
-                throw IOException("\${profile.name} InnerTube returned HTTP $status")
+                throw IOException("${profile.name} InnerTube returned HTTP $status")
             }
             val root = JSONObject(responseText)
             val playability = root.optJSONObject("playabilityStatus")
             val playabilityStatus = playability?.optString("status", "").orEmpty()
             if (playabilityStatus.isNotBlank() && !playabilityStatus.equals("OK", ignoreCase = true)) {
                 val reason = playability.optString("reason", "")
-                throw IOException("\${profile.name} playback status $playabilityStatus: $reason".trim())
+                throw IOException("${profile.name} playback status $playabilityStatus: $reason".trim())
             }
             parseAudioCandidates(root, profile, quality)
         } finally {
@@ -519,7 +519,7 @@ object AudioStreamResolver {
     }
 
     fun markCandidateFailed(videoId: String, stream: ResolvedAudioStream) {
-        failedUrls["$videoId|\${stream.url}"] = System.currentTimeMillis() + URL_BACKOFF_MS
+        failedUrls["$videoId|${stream.url}"] = System.currentTimeMillis() + URL_BACKOFF_MS
         invalidateStream(videoId)
         lastClient[videoId]?.takeIf { it == stream.source }?.let {
             failedClients[it] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
