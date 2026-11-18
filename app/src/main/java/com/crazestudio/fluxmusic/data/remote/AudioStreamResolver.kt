@@ -484,7 +484,6 @@ object AudioStreamResolver {
                 throw IOException("${profile.name} playback status $playabilityStatus: $reason".trim())
             }
             val playbackHeaders = LinkedHashMap<String, String>()
-            if (session.cookieHeader.isNotBlank()) playbackHeaders["Cookie"] = session.cookieHeader
             if (session.visitorData.isNotBlank()) playbackHeaders["X-Goog-Visitor-Id"] = session.visitorData
             parseAudioCandidates(root, profile, quality).map { stream ->
                 stream.copy(extraHeaders = stream.extraHeaders + playbackHeaders)
