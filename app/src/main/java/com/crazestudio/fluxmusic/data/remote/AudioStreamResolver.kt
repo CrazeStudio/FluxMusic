@@ -8,7 +8,6 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
-import org.schabi.newpipe.extractor.stream.AudioStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -41,41 +40,25 @@ object AudioStreamResolver {
     private const val TAG = "FluxMusicResolver"
 
     const val USER_AGENT = YtMusicCatalog.USER_AGENT
-    const val VISIONOS_USER_AGENT =
-        "com.google.visionos.youtube/1.04(RealityDevice17,1; U; CPU visionOS 26_6_0 like Mac OS X; GB)"
-    const val ANDROID_VR_USER_AGENT =
-        "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
-    const val IOS_USER_AGENT =
-        "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X)"
     const val ANDROID_USER_AGENT =
         "com.google.android.youtube/19.45.38 (Linux; U; Android 14) gzip"
 
-    const val STREAM_CACHE_TAG = "|flux-resolver-v6"
+    const val STREAM_CACHE_TAG = "|flux-resolver-v7"
     const val STREAM_CACHE_TTL_MS = 30 * 60 * 1000L
-
-    private const val INNERTUBE_PLAYER_ENDPOINT =
-        "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false"
 
     private data class CandidateListEntry(
         val expiresAt: Long,
         val candidates: List<ResolvedAudioStream>
     )
 
+    // Robust Piped instances known for stable unauthenticated JSON stream extraction
     private val PIPED_INSTANCES = listOf(
-        "https://api.piped.private.coffee",
         "https://pipedapi.kavin.rocks",
+        "https://api.piped.private.coffee",
         "https://pipedapi.leptons.xyz",
-        "https://pipedapi.nosebs.ru",
-        "https://piped-api.privacy.com.de",
+        "https://pipedapi.adminforge.de",
+        "https://api.piped.yt",
         "https://pipedapi.drgns.space"
-    )
-
-    // Public Invidious instances; local=true proxy endpoints avoid IP-locked googlevideo 403s.
-    private val INVIDIOUS_INSTANCES = listOf(
-        "https://inv.nadeko.net",
-        "https://invidious.nerdvpn.de",
-        "https://invidious.tiekoetter.com",
-        "https://yt.chocolatemoo53.com"
     )
 
     @Volatile
@@ -97,15 +80,10 @@ object AudioStreamResolver {
     private val failedProviders = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
     private val failedUrls = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
     private val lastResolvedProvider = ConcurrentHashMap<String, String>()
-    private const val PROVIDER_BACKOFF_MS = 90 * 1000L
-    private const val URL_BACKOFF_MS = 5 * 60 * 1000L
+    private const val PROVIDER_BACKOFF_MS = 60 * 1000L
+    private const val URL_BACKOFF_MS = 3 * 60 * 1000L
     private val streamCache = LinkedHashMap<String, CandidateListEntry>(96, 0.75f, true)
 
-    /**
-     * YouTube videoplayback URLs need a fresh request number (rn) on each open.
-     * Operate directly on raw encoded query parameters so signed tokens (+, %2B, %3D, %2C)
-     * are never altered by Uri.Builder decoding/re-encoding.
-     */
     fun prepareYoutubePlaybackUrl(url: String): String = runCatching {
         val uri = Uri.parse(url)
         val host = uri.host.orEmpty().lowercase()
@@ -127,36 +105,6 @@ object AudioStreamResolver {
             "$base?${preserved.joinToString("&")}&rn=$rnValue"
         }
     }.getOrDefault(url)
-
-    fun resolveIdentityForUrl(url: String, fallbackUa: String = USER_AGENT): Pair<String, Map<String, String>> {
-        val client = extractQueryParam(url, "c")?.uppercase().orEmpty()
-        return when {
-            client == "ANDROID_VR" -> ANDROID_VR_USER_AGENT to emptyMap()
-            client == "IOS" -> IOS_USER_AGENT to emptyMap()
-            client.startsWith("ANDROID") -> ANDROID_USER_AGENT to emptyMap()
-            client == "VISIONOS" -> VISIONOS_USER_AGENT to emptyMap()
-            client.startsWith("WEB") || client == "MWEB" || client.startsWith("TVHTML5") ->
-                USER_AGENT to mapOf(
-                    "Origin" to "https://www.youtube.com",
-                    "Referer" to "https://www.youtube.com/"
-                )
-            else -> fallbackUa to emptyMap()
-        }
-    }
-
-    private fun extractQueryParam(url: String, targetName: String): String? {
-        val qIndex = url.indexOf('?')
-        if (qIndex < 0) return null
-        val rawQuery = url.substring(qIndex + 1)
-        for (part in rawQuery.split('&')) {
-            val eq = part.indexOf('=')
-            val key = if (eq >= 0) part.substring(0, eq) else part
-            if (key.equals(targetName, ignoreCase = true)) {
-                return if (eq >= 0) part.substring(eq + 1) else ""
-            }
-        }
-        return null
-    }
 
     fun attachPersistentStreamStore(
         reader: (videoId: String, quality: AudioQuality) -> ResolvedAudioStream?,
@@ -239,16 +187,11 @@ object AudioStreamResolver {
                     !isUrlFailed(videoId, it.url)
             }?.let { cached ->
                 val expiry = cached.expiresAt.takeIf { it > now } ?: (now + 5 * 60 * 1000L)
-                val (ua, headers) = resolveIdentityForUrl(cached.url, cached.userAgent)
-                val normalized = cached.copy(
-                    userAgent = ua,
-                    extraHeaders = if (cached.extraHeaders.isNotEmpty()) cached.extraHeaders else headers
-                )
-                val list = listOf(normalized)
+                val list = listOf(cached)
                 synchronized(streamCache) {
                     streamCache[key] = CandidateListEntry(expiry, list)
                 }
-                lastResolvedProvider[videoId] = normalized.source
+                lastResolvedProvider[videoId] = cached.source
                 return list
             }
         }
@@ -287,10 +230,6 @@ object AudioStreamResolver {
         }
     }
 
-    /**
-     * Promotes a stream that actually returned audio bytes to the front of the cache
-     * so seeking or re-buffering immediately reuses the verified stream.
-     */
     fun markCandidateSucceeded(
         videoId: String,
         quality: AudioQuality,
@@ -319,10 +258,6 @@ object AudioStreamResolver {
         invalidateStream(videoId)
     }
 
-    /**
-     * Records failure for a single candidate URL without immediately banning the whole provider
-     * while other candidate streams from the same provider remain untested.
-     */
     fun markCandidateFailed(videoId: String, stream: ResolvedAudioStream) {
         val now = System.currentTimeMillis()
         failedUrls.computeIfAbsent(videoId) { ConcurrentHashMap() }[stream.url] = now + URL_BACKOFF_MS
@@ -350,10 +285,6 @@ object AudioStreamResolver {
         runCatching { persistentInvalidator?.invoke(videoId) }
     }
 
-    /**
-     * Called after an ExoPlayer-level failure (e.g. decoder/parser failure or exhausted retries).
-     * Penalizes the last active provider so the next retry escalates to another extractor/provider.
-     */
     fun markPlaybackFailed(videoId: String) {
         val failedSources = synchronized(streamCache) {
             val entries = streamCache.filterKeys { it.startsWith("$videoId:") }.values.toList()
@@ -391,7 +322,16 @@ object AudioStreamResolver {
 
     private fun cacheExpiry(stream: ResolvedAudioStream, now: Long): Long {
         val upstreamExpiry = runCatching {
-            extractQueryParam(stream.url, "expire")?.toLongOrNull()?.times(1000L)
+            val qIndex = stream.url.indexOf('?')
+            if (qIndex < 0) return@runCatching null
+            val rawQuery = stream.url.substring(qIndex + 1)
+            for (part in rawQuery.split('&')) {
+                val eq = part.indexOf('=')
+                if (eq >= 0 && part.substring(0, eq).equals("expire", ignoreCase = true)) {
+                    return@runCatching part.substring(eq + 1).toLongOrNull()?.times(1000L)
+                }
+            }
+            null
         }.getOrNull()
         val fallback = now + 8 * 60 * 1000L
         val safeExpiry = upstreamExpiry?.minus(60_000L) ?: fallback
@@ -409,37 +349,19 @@ object AudioStreamResolver {
             }
         }
 
-        // 1. Direct InnerTube ANDROID_VR: fast single-POST JSON, no PoToken/JS decryption required.
-        collectFrom("innertube_vr") { resolveViaInnerTubeVr(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 2. NewPipeExtractor multi-client extraction.
-        collectFrom("newpipe") { resolveViaNewPipe(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 3. Direct InnerTube iOS / Android / Embedded TV player fallbacks.
-        collectFrom("innertube_ios") { resolveViaInnerTubeIos(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        collectFrom("innertube_android") { resolveViaInnerTubeAndroid(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        collectFrom("innertube_tv") { resolveViaInnerTubeTvEmbedded(videoId, quality) }
-        if (collected.isNotEmpty()) return collected.distinctBy { it.url }
-
-        // 4. Piped proxy backups.
+        // 1. Piped API instances (unauthenticated robust JSON stream extraction)
         collectFrom("piped") { resolveViaPiped(videoId, quality) }
         if (collected.isNotEmpty()) return collected.distinctBy { it.url }
 
-        // 5. Invidious backups (using local=true proxy streams).
-        collectFrom("invidious") { resolveViaInvidious(videoId, quality) }
+        // 2. NewPipeExtractor multi-client extraction
+        collectFrom("newpipe") { resolveViaNewPipe(videoId, quality) }
         if (collected.isNotEmpty()) return collected.distinctBy { it.url }
 
-        // If every provider is currently in backoff, clear backoff once and retry ANDROID_VR + NewPipe cleanly.
+        // If every provider is in backoff, clear and retry Piped + NewPipe once
         val hadBackoff = failedProviders.remove(videoId) != null
         failedUrls.remove(videoId)
         if (hadBackoff) {
-            val recovery = (resolveViaInnerTubeVr(videoId, quality) + resolveViaNewPipe(videoId, quality))
+            val recovery = (resolveViaPiped(videoId, quality) + resolveViaNewPipe(videoId, quality))
                 .distinctBy { it.url }
             if (recovery.isNotEmpty()) return recovery
         }
@@ -447,211 +369,12 @@ object AudioStreamResolver {
         throw IOException("No audio stream is currently available from YouTube or fallback providers. Please retry.")
     }
 
-    private fun resolveViaInnerTubeVr(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        val client = JSONObject()
-            .put("clientName", "ANDROID_VR")
-            .put("clientVersion", "1.60.19")
-            .put("deviceMake", "Oculus")
-            .put("deviceModel", "Quest 3")
-            .put("osName", "Android")
-            .put("osVersion", "12L")
-            .put("androidSdkVersion", 32)
-            .put("hl", "en")
-            .put("gl", "US")
-            .put("utcOffsetMinutes", 0)
-        return fetchInnerTubePlayerStreams(
-            videoId = videoId,
-            quality = quality,
-            source = "innertube_vr",
-            clientJson = client,
-            userAgent = ANDROID_VR_USER_AGENT,
-            clientIdHeader = "28",
-            clientVersionHeader = "1.60.19"
-        )
-    }
-
-    private fun resolveViaInnerTubeIos(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        val client = JSONObject()
-            .put("clientName", "IOS")
-            .put("clientVersion", "20.10.4")
-            .put("deviceMake", "Apple")
-            .put("deviceModel", "iPhone16,2")
-            .put("osName", "iPhone")
-            .put("osVersion", "18.3.2.22D82")
-            .put("hl", "en")
-            .put("gl", "US")
-            .put("utcOffsetMinutes", 0)
-        return fetchInnerTubePlayerStreams(
-            videoId = videoId,
-            quality = quality,
-            source = "innertube_ios",
-            clientJson = client,
-            userAgent = IOS_USER_AGENT,
-            clientIdHeader = "5",
-            clientVersionHeader = "20.10.4"
-        )
-    }
-
-    private fun resolveViaInnerTubeAndroid(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        val client = JSONObject()
-            .put("clientName", "ANDROID")
-            .put("clientVersion", "19.45.38")
-            .put("androidSdkVersion", 34)
-            .put("hl", "en")
-            .put("gl", "US")
-            .put("utcOffsetMinutes", 0)
-        return fetchInnerTubePlayerStreams(
-            videoId = videoId,
-            quality = quality,
-            source = "innertube_android",
-            clientJson = client,
-            userAgent = ANDROID_USER_AGENT,
-            clientIdHeader = "3",
-            clientVersionHeader = "19.45.38"
-        )
-    }
-
-    private fun resolveViaInnerTubeTvEmbedded(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        val client = JSONObject()
-            .put("clientName", "TVHTML5_SIMPLY_EMBEDDED_PLAYER")
-            .put("clientVersion", "2.0")
-            .put("hl", "en")
-            .put("gl", "US")
-        val thirdParty = JSONObject().put("embedUrl", "https://www.youtube.com/")
-        return fetchInnerTubePlayerStreams(
-            videoId = videoId,
-            quality = quality,
-            source = "innertube_tv",
-            clientJson = client,
-            userAgent = USER_AGENT,
-            clientIdHeader = "85",
-            clientVersionHeader = "2.0",
-            thirdPartyJson = thirdParty,
-            extraPlaybackHeaders = mapOf(
-                "Origin" to "https://www.youtube.com",
-                "Referer" to "https://www.youtube.com/"
-            )
-        )
-    }
-
-    private fun fetchInnerTubePlayerStreams(
-        videoId: String,
-        quality: AudioQuality,
-        source: String,
-        clientJson: JSONObject,
-        userAgent: String,
-        clientIdHeader: String,
-        clientVersionHeader: String,
-        thirdPartyJson: JSONObject? = null,
-        extraPlaybackHeaders: Map<String, String> = emptyMap()
-    ): List<ResolvedAudioStream> = runCatching {
-        val contextObj = JSONObject().put("client", clientJson)
-        if (thirdPartyJson != null) {
-            contextObj.put("thirdParty", thirdPartyJson)
-        }
-        val body = JSONObject()
-            .put("videoId", videoId)
-            .put("contentCheckOk", true)
-            .put("racyCheckOk", true)
-            .put("context", contextObj)
-
-        val conn = (URL(INNERTUBE_PLAYER_ENDPOINT).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            connectTimeout = 4000
-            readTimeout = 6000
-            doOutput = true
-            setRequestProperty("User-Agent", userAgent)
-            setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Accept", "application/json")
-            setRequestProperty("X-YouTube-Client-Name", clientIdHeader)
-            setRequestProperty("X-YouTube-Client-Version", clientVersionHeader)
-            if (extraPlaybackHeaders.containsKey("Origin")) {
-                setRequestProperty("Origin", extraPlaybackHeaders["Origin"])
-            }
-        }
-        try {
-            conn.outputStream.use { out ->
-                out.write(body.toString().toByteArray(StandardCharsets.UTF_8))
-            }
-            if (conn.responseCode !in 200..299) return@runCatching emptyList()
-            val root = JSONObject(readStream(decodeInputStream(conn)))
-            val status = root.optJSONObject("playabilityStatus")?.optString("status", "").orEmpty()
-            if (status.isNotEmpty() && !status.equals("OK", ignoreCase = true)) {
-                Log.w(TAG, "$source playability=$status for $videoId")
-                return@runCatching emptyList()
-            }
-            val adaptive = root.optJSONObject("streamingData")?.optJSONArray("adaptiveFormats")
-                ?: return@runCatching emptyList()
-            val candidates = ArrayList<ResolvedAudioStream>()
-            for (i in 0 until adaptive.length()) {
-                val item = adaptive.optJSONObject(i) ?: continue
-                val mime = item.optString("mimeType", "")
-                if (!mime.startsWith("audio/", ignoreCase = true)) continue
-                val audioTrack = item.optJSONObject("audioTrack")
-                if (audioTrack != null && audioTrack.has("audioIsDefault") && !audioTrack.optBoolean("audioIsDefault", true)) {
-                    // Skip non-default dubbed tracks when multiple audio tracks are present.
-                    continue
-                }
-                val url = item.optString("url", "")
-                if (!url.startsWith("https://") || url.contains(".m3u8", ignoreCase = true)) continue
-                val rawBitrate = item.optInt("averageBitrate", item.optInt("bitrate", 0))
-                val kbps = (if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate).coerceAtLeast(1)
-                val (resolvedUa, urlHeaders) = resolveIdentityForUrl(url, userAgent)
-                candidates.add(
-                    ResolvedAudioStream(
-                        url = url,
-                        userAgent = resolvedUa,
-                        source = source,
-                        mimeType = mime,
-                        bitrateKbps = kbps,
-                        extraHeaders = if (urlHeaders.isNotEmpty()) urlHeaders else extraPlaybackHeaders
-                    )
-                )
-            }
-            orderCandidates(candidates, quality)
-        } finally {
-            conn.disconnect()
-        }
-    }.onFailure { err ->
-        Log.w(TAG, "$source failed for $videoId: ${err.message}")
-    }.getOrDefault(emptyList())
-
-    private fun resolveViaNewPipe(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> = try {
-        initializeExtractor()
-        val extractor = NewPipe.getService("YouTube")
-            .getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
-        extractor.fetchPage()
-        val streams = extractor.audioStreams.filter { stream ->
-            stream.isUrl && !stream.content.isNullOrBlank() &&
-                stream.content.startsWith("https://") &&
-                !stream.content.contains(".m3u8", ignoreCase = true) &&
-                !stream.content.startsWith("manifest", ignoreCase = true)
-        }
-        Log.i(TAG, "NewPipe audio stream candidates=${streams.size}")
-        val mapped = streams.mapNotNull { candidate ->
-            val url = candidate.content?.takeIf { it.startsWith("https://") } ?: return@mapNotNull null
-            val (ua, headers) = resolveIdentityForUrl(url, VISIONOS_USER_AGENT)
-            ResolvedAudioStream(
-                url = url,
-                userAgent = ua,
-                source = "newpipe",
-                mimeType = candidate.format?.mimeType.orEmpty(),
-                bitrateKbps = candidate.averageBitrate.coerceAtLeast(1),
-                extraHeaders = headers
-            )
-        }
-        orderCandidates(mapped, quality)
-    } catch (e: Exception) {
-        Log.w(TAG, "NewPipe extraction failed: ${e.message}", e)
-        emptyList()
-    }
-
     private fun resolveViaPiped(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
         for (base in PIPED_INSTANCES) {
             val resolved = runCatching {
                 val conn = (URL("$base/streams/$videoId").openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 2500
-                    readTimeout = 3500
+                    connectTimeout = 3000
+                    readTimeout = 4000
                     setRequestProperty("User-Agent", USER_AGENT)
                     setRequestProperty("Accept", "application/json")
                 }
@@ -668,15 +391,13 @@ object AudioStreamResolver {
                         val rawBitrate = item.optInt("bitrate", 0)
                         val kbps = (if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate).coerceAtLeast(1)
                         val mime = item.optString("mimeType", "")
-                        val (ua, headers) = resolveIdentityForUrl(url, USER_AGENT)
                         candidates.add(
                             ResolvedAudioStream(
                                 url = url,
-                                userAgent = ua,
+                                userAgent = USER_AGENT,
                                 source = "piped",
                                 mimeType = mime,
-                                bitrateKbps = kbps,
-                                extraHeaders = headers
+                                bitrateKbps = kbps
                             )
                         )
                     }
@@ -690,49 +411,32 @@ object AudioStreamResolver {
         return emptyList()
     }
 
-    private fun resolveViaInvidious(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        for (base in INVIDIOUS_INSTANCES) {
-            val resolved = runCatching {
-                val conn = (URL("$base/api/v1/videos/$videoId").openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 2500
-                    readTimeout = 3500
-                    setRequestProperty("User-Agent", USER_AGENT)
-                    setRequestProperty("Accept", "application/json")
-                }
-                try {
-                    if (conn.responseCode !in 200..299) return@runCatching emptyList()
-                    val formats = JSONObject(readStream(decodeInputStream(conn))).optJSONArray("adaptiveFormats")
-                        ?: return@runCatching emptyList()
-                    val candidates = ArrayList<ResolvedAudioStream>()
-                    for (i in 0 until formats.length()) {
-                        val item = formats.optJSONObject(i) ?: continue
-                        val mime = item.optString("type", "")
-                        if (!mime.startsWith("audio/", true)) continue
-                        val itag = item.optString("itag", "")
-                        val rawBitrate = item.optString("bitrate", "0").toIntOrNull() ?: 0
-                        val kbps = (if (rawBitrate > 1000) rawBitrate / 1000 else rawBitrate).coerceAtLeast(1)
-                        // Prefer Invidious proxied stream endpoint (?local=true) because direct googlevideo URLs
-                        // are often IP-bound to the Invidious server and return 403 to the device.
-                        if (itag.isNotBlank()) {
-                            candidates.add(
-                                ResolvedAudioStream(
-                                    url = "$base/latest_version?id=$videoId&itag=$itag&local=true",
-                                    userAgent = USER_AGENT,
-                                    source = "invidious",
-                                    mimeType = mime,
-                                    bitrateKbps = kbps
-                                )
-                            )
-                        }
-                    }
-                    orderCandidates(candidates, quality)
-                } finally {
-                    conn.disconnect()
-                }
-            }.getOrDefault(emptyList())
-            if (resolved.isNotEmpty()) return resolved
+    private fun resolveViaNewPipe(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> = try {
+        initializeExtractor()
+        val extractor = NewPipe.getService("YouTube")
+            .getStreamExtractor("https://www.youtube.com/watch?v=$videoId")
+        extractor.fetchPage()
+        val streams = extractor.audioStreams.filter { stream ->
+            stream.isUrl && !stream.content.isNullOrBlank() &&
+                stream.content.startsWith("https://") &&
+                !stream.content.contains(".m3u8", ignoreCase = true) &&
+                !stream.content.startsWith("manifest", ignoreCase = true)
         }
-        return emptyList()
+        Log.i(TAG, "NewPipe audio stream candidates=${streams.size}")
+        val mapped = streams.mapNotNull { candidate ->
+            val url = candidate.content?.takeIf { it.startsWith("https://") } ?: return@mapNotNull null
+            ResolvedAudioStream(
+                url = url,
+                userAgent = USER_AGENT,
+                source = "newpipe",
+                mimeType = candidate.format?.mimeType.orEmpty(),
+                bitrateKbps = candidate.averageBitrate.coerceAtLeast(1)
+            )
+        }
+        orderCandidates(mapped, quality)
+    } catch (e: Exception) {
+        Log.w(TAG, "NewPipe extraction failed: ${e.message}", e)
+        emptyList()
     }
 
     internal fun orderCandidates(
@@ -740,8 +444,6 @@ object AudioStreamResolver {
         quality: AudioQuality
     ): List<ResolvedAudioStream> {
         if (candidates.isEmpty()) return emptyList()
-        // Slightly prefer AAC/MP4 (itag 140) when bitrates are comparable for universal Android codec support,
-        // while keeping WebM/Opus in the fallback chain.
         val sorted = candidates.sortedWith(
             compareByDescending<ResolvedAudioStream> { it.bitrateKbps }
                 .thenByDescending { it.mimeType.contains("mp4", ignoreCase = true) }
@@ -796,13 +498,12 @@ object AudioStreamResolver {
         override fun execute(request: Request): Response {
             val connection = (URL(request.url()).openConnection() as HttpURLConnection).apply {
                 requestMethod = request.httpMethod()
-                connectTimeout = 6000
-                readTimeout = 10000
+                connectTimeout = 5000
+                readTimeout = 8000
                 instanceFollowRedirects = true
                 val hasCustomUa = request.headers()?.keys?.any { it.equals("User-Agent", true) } == true
                 if (!hasCustomUa) setRequestProperty("User-Agent", USER_AGENT)
                 request.headers()?.forEach { (key, values) ->
-                    // Let HttpURLConnection handle Accept-Encoding transparently unless we decode gzip ourselves.
                     if (!key.equals("Accept-Encoding", ignoreCase = true)) {
                         values?.forEachIndexed { index, value ->
                             if (index == 0) setRequestProperty(key, value) else addRequestProperty(key, value)

@@ -35,28 +35,6 @@ class AudioStreamResolverTest {
     }
 
     @Test
-    fun resolveIdentityForUrlMatchesClientUserAgentAndOriginHeaders() {
-        val (vrUa, vrHeaders) = AudioStreamResolver.resolveIdentityForUrl(
-            "https://rr1.googlevideo.com/videoplayback?c=ANDROID_VR&itag=140"
-        )
-        assertEquals(AudioStreamResolver.ANDROID_VR_USER_AGENT, vrUa)
-        assertTrue(vrHeaders.isEmpty())
-
-        val (iosUa, iosHeaders) = AudioStreamResolver.resolveIdentityForUrl(
-            "https://rr1.googlevideo.com/videoplayback?c=IOS&itag=140"
-        )
-        assertEquals(AudioStreamResolver.IOS_USER_AGENT, iosUa)
-        assertTrue(iosHeaders.isEmpty())
-
-        val (webUa, webHeaders) = AudioStreamResolver.resolveIdentityForUrl(
-            "https://rr1.googlevideo.com/videoplayback?c=TVHTML5_SIMPLY_EMBEDDED_PLAYER&itag=140"
-        )
-        assertEquals(AudioStreamResolver.USER_AGENT, webUa)
-        assertEquals("https://www.youtube.com", webHeaders["Origin"])
-        assertEquals("https://www.youtube.com/", webHeaders["Referer"])
-    }
-
-    @Test
     fun orderCandidatesRespectsQualityAndPrefersMp4OnTie() {
         val opus128 = ResolvedAudioStream("https://example.com/opus128", "ua", mimeType = "audio/webm", bitrateKbps = 128)
         val mp4128 = ResolvedAudioStream("https://example.com/mp4128", "ua", mimeType = "audio/mp4", bitrateKbps = 128)
