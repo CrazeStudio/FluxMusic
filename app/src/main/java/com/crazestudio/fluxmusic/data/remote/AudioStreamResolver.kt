@@ -92,9 +92,21 @@ object AudioStreamResolver {
     fun prepareYoutubePlaybackUrl(url: String): String = runCatching {
         val uri = Uri.parse(url)
         val host = uri.host.orEmpty().lowercase()
-        if (!host.endsWith("googlevideo.com") || !uri.path.orEmpty().startsWith("/videoplayback") || uri.getQueryParameter("rn") != null) return url
-        uri.buildUpon()
-            .appendQueryParameter("rn", playbackRequestNumber.getAndIncrement().toString())
+        val isGoogleVideo = host == "googlevideo.com" || host.endsWith(".googlevideo.com")
+        if (!isGoogleVideo || !uri.path.orEmpty().startsWith("/videoplayback")) return url
+
+        // Extractors may return a URL that already contains rn. Reusing that value
+        // across separate Media3 opens can cause YouTube to reject later requests.
+        // Rebuild the query while preserving every parameter except the stale rn.
+        val builder = uri.buildUpon().clearQuery()
+        uri.queryParameterNames.forEach { name ->
+            if (!name.equals("rn", ignoreCase = true)) {
+                uri.getQueryParameters(name).forEach { value ->
+                    builder.appendQueryParameter(name, value)
+                }
+            }
+        }
+        builder.appendQueryParameter("rn", playbackRequestNumber.incrementAndGet().toString())
             .build()
             .toString()
     }.getOrDefault(url)
