@@ -256,7 +256,8 @@ object AudioStreamResolver {
         val failures = ArrayList<String>()
 
         for (profile in profiles) {
-            val failedUntil = failedClients[profile.name] ?: 0L
+            val clientFailureKey = "$videoId|${profile.name}"
+            val failedUntil = failedClients[clientFailureKey] ?: 0L
             if (failedUntil > System.currentTimeMillis()) continue
             val candidates = runCatching {
                 requestPlayer(videoId, quality, profile, session)
@@ -265,11 +266,11 @@ object AudioStreamResolver {
             }.getOrDefault(emptyList())
 
             if (candidates.isNotEmpty()) {
-                failedClients.remove(profile.name)
+                failedClients.remove(clientFailureKey)
                 Log.i(TAG, "Resolved ${candidates.size} direct audio candidates using ${profile.name}")
                 return orderCandidates(candidates, quality)
             }
-            failedClients[profile.name] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
+            failedClients[clientFailureKey] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
             failures.add(profile.name)
         }
 
@@ -528,22 +529,18 @@ object AudioStreamResolver {
     fun markCandidateFailed(videoId: String, stream: ResolvedAudioStream) {
         failedUrls["$videoId|${stream.url}"] = System.currentTimeMillis() + URL_BACKOFF_MS
         invalidateStream(videoId)
-        lastClient[videoId]?.takeIf { it == stream.source }?.let {
-            failedClients[it] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
-            lastClient.remove(videoId)
-        }
     }
 
     fun markPlaybackFailed(videoId: String) {
         lastClient.remove(videoId)?.let { client ->
-            failedClients[client] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
+            failedClients["$videoId|$client"] = System.currentTimeMillis() + CLIENT_BACKOFF_MS
         }
         invalidateStream(videoId)
     }
 
     fun clearFailuresFor(videoId: String) {
         failedUrls.keys.filter { it.startsWith("$videoId|") }.forEach(failedUrls::remove)
-        failedClients.clear()
+        failedClients.keys.filter { it.startsWith("$videoId|") }.forEach(failedClients::remove)
         lastClient.remove(videoId)
         invalidateStream(videoId)
     }
