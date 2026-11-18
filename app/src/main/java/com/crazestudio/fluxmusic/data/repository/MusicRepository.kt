@@ -23,6 +23,7 @@ import com.crazestudio.fluxmusic.data.model.TrackLyrics
 import com.crazestudio.fluxmusic.data.remote.LrcLibClient
 import com.crazestudio.fluxmusic.data.remote.ResolvedAudioStream
 import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
+import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
