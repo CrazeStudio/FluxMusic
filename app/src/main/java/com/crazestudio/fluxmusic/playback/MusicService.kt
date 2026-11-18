@@ -10,7 +10,6 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -20,6 +19,7 @@ import com.crazestudio.fluxmusic.FluxApplication
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import com.crazestudio.fluxmusic.data.model.EqualizerPreset
 import com.crazestudio.fluxmusic.data.model.Track
+import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
