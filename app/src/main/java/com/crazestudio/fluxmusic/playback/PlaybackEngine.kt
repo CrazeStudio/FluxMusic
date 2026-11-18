@@ -26,13 +26,11 @@ import com.crazestudio.fluxmusic.data.remote.ResolvedAudioStream
 import java.io.IOException
 
 /**
- * Owns ExoPlayer construction and translates internal Flux track URIs into
- * real audio requests with seamless candidate-stream fallback on open failures.
+ * Media3 adapter. UI continues to submit Flux track IDs as before; this layer
+ * resolves each ID to a fresh native audio URL only when Media3 opens the item.
  */
 @OptIn(UnstableApi::class)
-class PlaybackEngine(
-    context: Context
-) {
+class PlaybackEngine(context: Context) {
     private val appContext = context.applicationContext
 
     @Volatile private var quality: AudioQuality = AudioQuality.AUTO
@@ -47,37 +45,48 @@ class PlaybackEngine(
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(AudioStreamResolver.USER_AGENT)
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(6_000)
-            .setReadTimeoutMs(12_000)
+            .setConnectTimeoutMs(12_000)
+            .setReadTimeoutMs(20_000)
+            .setDefaultRequestProperties(
+                mapOf(
+                    "Accept" to "*/*",
+                    "Accept-Encoding" to "identity"
+                )
+            )
 
-        val fluxDataSourceFactory = DataSource.Factory {
-            FluxAudioDataSource(
+        val sourceFactory = DataSource.Factory {
+            NativeAudioDataSource(
                 delegate = httpFactory.createDataSource(),
                 qualityProvider = { quality },
                 offlineProvider = { offlineMode }
             )
         }
 
-        val extractors = DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)
         val errorPolicy = object : DefaultLoadErrorHandlingPolicy(1) {
-            override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                // If FluxAudioDataSource already exhausted every provider & candidate, fail immediately
-                // rather than stalling the UI with exponential backoff retries on dead streams.
-                if (loadErrorInfo.exception is AllCandidatesFailedException) {
+            override fun getRetryDelayMsFor(
+                loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo
+            ): Long {
+                if (loadErrorInfo.exception is AllAudioCandidatesFailedException) {
                     return C.TIME_UNSET
                 }
                 return super.getRetryDelayMsFor(loadErrorInfo)
             }
         }
-        val mediaSourceFactory = DefaultMediaSourceFactory(fluxDataSourceFactory, extractors)
-            .setLoadErrorHandlingPolicy(errorPolicy)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(
+            sourceFactory,
+            DefaultExtractorsFactory().setConstantBitrateSeekingEnabled(true)
+        ).setLoadErrorHandlingPolicy(errorPolicy)
+
         val selector = DefaultTrackSelector(appContext).apply {
             setParameters(buildUponParameters().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build())
         }
+
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15_000, 50_000, 500, 1_500)
+            .setBufferDurationsMs(12_000, 45_000, 500, 1_500)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
+
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -92,12 +101,12 @@ class PlaybackEngine(
             .build()
     }
 
-    private class AllCandidatesFailedException(
+    private class AllAudioCandidatesFailedException(
         message: String,
         cause: Throwable?
     ) : IOException(message, cause)
 
-    private class FluxAudioDataSource(
+    private class NativeAudioDataSource(
         private val delegate: HttpDataSource,
         private val qualityProvider: () -> AudioQuality,
         private val offlineProvider: () -> Boolean
@@ -112,59 +121,60 @@ class PlaybackEngine(
                 ?: return delegate.open(dataSpec)
 
             if (offlineProvider()) {
-                throw AllCandidatesFailedException(
+                throw AllAudioCandidatesFailedException(
                     "Offline Cache Mode is enabled. Disable it to stream.",
                     null
                 )
             }
 
+            var lastError: Exception? = null
             val attemptedUrls = HashSet<String>()
-            var lastError: Throwable? = null
-            var round = 0
-            val maxRounds = 3
 
-            while (round < maxRounds) {
-                val forceRefresh = round > 0
+            for (round in 0..1) {
                 val activeQuality = qualityProvider()
                 val candidates = try {
                     AudioStreamResolver.resolveCandidateStreams(
                         videoId = videoId,
                         quality = activeQuality,
-                        forceRefresh = forceRefresh
+                        forceRefresh = round > 0
                     )
-                } catch (e: Exception) {
-                    lastError = e
+                } catch (error: Exception) {
+                    lastError = error
                     break
                 }
 
-                val freshCandidates = candidates.filter { attemptedUrls.add(it.url) }
-                if (freshCandidates.isEmpty()) {
-                    round++
-                    continue
-                }
-
-                // Limit per-round opens so a single track fails cleanly rather than looping forever.
-                for (candidate in freshCandidates.take(6)) {
-                    val resolvedSpec = buildCandidateSpec(dataSpec, candidate)
+                for (candidate in candidates) {
+                    if (!attemptedUrls.add(candidate.url)) continue
                     try {
-                        val length = delegate.open(resolvedSpec)
-                        AudioStreamResolver.markCandidateSucceeded(videoId, activeQuality, candidate)
-                        return length
-                    } catch (e: Exception) {
-                        lastError = e
+                        delegate.close()
+                        val resolvedSpec = buildCandidateSpec(dataSpec, candidate)
+                        val openedLength = delegate.open(resolvedSpec)
+                        AudioStreamResolver.markCandidateSucceeded(
+                            videoId,
+                            activeQuality,
+                            candidate
+                        )
+                        Log.i(
+                            "FluxPlayback",
+                            "Opened ${candidate.mimeType} stream (${candidate.bitrateKbps} kbps)"
+                        )
+                        return openedLength
+                    } catch (error: Exception) {
+                        lastError = error
                         Log.w(
-                            "FluxPlaybackEngine",
-                            "Stream candidate failed (${candidate.source}, ${candidate.mimeType}): ${e.message}"
+                            "FluxPlayback",
+                            "Stream open rejected by upstream (${candidate.mimeType}): ${error.message}"
                         )
                         runCatching { delegate.close() }
                         AudioStreamResolver.markCandidateFailed(videoId, candidate)
                     }
                 }
-                round++
             }
 
-            throw AllCandidatesFailedException(
-                lastError?.message ?: "Unable to stream this track right now. Please retry.",
+            val detail = lastError?.message?.takeIf { it.isNotBlank() }
+                ?: "No usable audio format was returned."
+            throw AllAudioCandidatesFailedException(
+                "Could not open an audio stream for this track: $detail",
                 lastError
             )
         }
@@ -173,15 +183,14 @@ class PlaybackEngine(
             original: DataSpec,
             candidate: ResolvedAudioStream
         ): DataSpec {
-            val requestUrl = AudioStreamResolver.prepareYoutubePlaybackUrl(candidate.url)
             val headers = HashMap(original.httpRequestHeaders).apply {
                 remove("TE")
                 put("User-Agent", candidate.userAgent)
                 put("Accept-Encoding", "identity")
-                candidate.extraHeaders.forEach { (k, v) -> put(k, v) }
+                candidate.extraHeaders.forEach { (name, value) -> put(name, value) }
             }
             return original.buildUpon()
-                .setUri(Uri.parse(requestUrl))
+                .setUri(Uri.parse(AudioStreamResolver.prepareYoutubePlaybackUrl(candidate.url)))
                 .setHttpRequestHeaders(headers)
                 .build()
         }
