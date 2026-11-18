@@ -97,6 +97,10 @@ object AudioStreamResolver {
             throw IOException("yt-dlp initialization was interrupted.", e)
         } catch (e: ExecutionException) {
             val cause = e.cause ?: e
+            synchronized(this) {
+                if (initialization === task) initialization = null
+            }
+            applicationContext?.let(::initialize)
             throw IOException("yt-dlp could not initialize: ${cause.message ?: "unknown error"}", cause)
         }
     }
