@@ -493,11 +493,14 @@ object AudioStreamResolver {
     private fun decodeCipherUrl(cipher: String, playerScript: String): String? {
         val values = parseFormEncoded(cipher)
         val rawUrl = values["url"]?.takeIf { it.isNotBlank() } ?: return null
-        val encrypted = values["s"].orEmpty()
-        if (encrypted.isBlank()) return rawUrl
-        if (playerScript.isBlank()) return null
-        val signature = PlayerScriptDecipher.decipher(encrypted, playerScript) ?: return null
         val parameter = values["sp"]?.takeIf { it.isNotBlank() } ?: "signature"
+        val clearSignature = values["sig"]?.takeIf { it.isNotBlank() }
+            ?: values["signature"]?.takeIf { it.isNotBlank() }
+        val signature = clearSignature ?: run {
+            val encrypted = values["s"].orEmpty()
+            if (encrypted.isBlank() || playerScript.isBlank()) return null
+            PlayerScriptDecipher.decipher(encrypted, playerScript) ?: return null
+        }
         return runCatching {
             Uri.parse(rawUrl).buildUpon().appendQueryParameter(parameter, signature).build().toString()
         }.getOrNull()
