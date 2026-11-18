@@ -56,6 +56,7 @@ class PlaybackController(
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controller: MediaController? = null
+    private var queueManager: PlaybackQueueManager? = null
     private var tickerJob: Job? = null
     private var pendingPlayRequest: Triple<List<Track>, Int, String>? = null
 
@@ -70,6 +71,7 @@ class PlaybackController(
             try {
                 val c = future.get()
                 controller = c
+                queueManager = PlaybackQueueManager(c)
                 c.addListener(this)
                 _state.update { it.copy(isConnected = true) }
                 syncFromPlayer()
@@ -151,10 +153,8 @@ class PlaybackController(
             connect()
             return
         }
-        val mediaItems = tracks.map { it.toMediaItem() }
-        c.setMediaItems(mediaItems, safeIdx, 0L)
-        c.prepare()
-        c.play()
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.replaceQueue(tracks, safeIdx)
         syncFromPlayer()
         onTrackStarted(selected)
     }
@@ -169,55 +169,43 @@ class PlaybackController(
 
     fun playNext(track: Track) {
         val c = controller ?: return
-        if (c.mediaItemCount == 0) {
-            playQueue(listOf(track), 0, "Queue")
-            return
-        }
-        val insertIdx = (c.currentMediaItemIndex + 1).coerceAtMost(c.mediaItemCount)
-        c.addMediaItem(insertIdx, track.toMediaItem())
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.playNext(track)
         syncFromPlayer()
     }
 
     fun addToQueue(track: Track) {
         val c = controller ?: return
-        if (c.mediaItemCount == 0) {
-            playQueue(listOf(track), 0, "Queue")
-            return
-        }
-        c.addMediaItem(track.toMediaItem())
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.addToEnd(track)
         syncFromPlayer()
     }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         val c = controller ?: return
-        val count = c.mediaItemCount
-        if (fromIndex !in 0 until count || toIndex !in 0 until count || fromIndex == toIndex) return
-        c.moveMediaItem(fromIndex, toIndex)
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.move(fromIndex, toIndex)
         syncFromPlayer()
     }
 
     fun removeQueueItem(index: Int) {
         val c = controller ?: return
-        if (index !in 0 until c.mediaItemCount) return
-        c.removeMediaItem(index)
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.remove(index)
         syncFromPlayer()
     }
 
     fun clearUpcomingQueue() {
         val c = controller ?: return
-        val currentIdx = c.currentMediaItemIndex
-        val count = c.mediaItemCount
-        if (currentIdx + 1 < count) {
-            c.removeMediaItems(currentIdx + 1, count)
-            syncFromPlayer()
-        }
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.clearUpcoming()
+        syncFromPlayer()
     }
 
     fun jumpToQueueIndex(index: Int) {
         val c = controller ?: return
-        if (index !in 0 until c.mediaItemCount) return
-        c.seekTo(index, 0L)
-        c.play()
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.jumpTo(index)
         syncFromPlayer()
     }
 
@@ -235,22 +223,16 @@ class PlaybackController(
 
     fun skipNext() {
         val c = controller ?: return
-        if (c.hasNextMediaItem()) {
-            c.seekToNextMediaItem()
-            c.play()
-        }
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.skipNext()
+        syncFromPlayer()
     }
 
     fun skipPrevious() {
         val c = controller ?: return
-        if (c.currentPosition > 3500L) {
-            c.seekTo(0L)
-        } else if (c.hasPreviousMediaItem()) {
-            c.seekToPreviousMediaItem()
-            c.play()
-        } else {
-            c.seekTo(0L)
-        }
+        val manager = queueManager ?: PlaybackQueueManager(c).also { queueManager = it }
+        manager.skipPrevious()
+        syncFromPlayer()
     }
 
     fun toggleShuffle() {
@@ -371,5 +353,6 @@ class PlaybackController(
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
         controller = null
+        queueManager = null
     }
 }
