@@ -85,14 +85,14 @@ object AudioStreamResolver {
 
     private val inFlightResolutions = ConcurrentHashMap<String, CompletableFuture<ResolvedAudioStream>>()
     private val failedProviders = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
+    private val lastResolvedProvider = ConcurrentHashMap<String, String>()
     private const val PROVIDER_BACKOFF_MS = 2 * 60 * 1000L
     private val streamCache = LinkedHashMap<String, StreamCacheEntry>(96, 0.75f, true)
 
     fun prepareYoutubePlaybackUrl(url: String): String = runCatching {
         val uri = Uri.parse(url)
-        if (!uri.path.orEmpty().startsWith("/videoplayback") || uri.getQueryParameter("rn") != null) {
-            return url
-        }
+        val host = uri.host.orEmpty().lowercase()
+        if (!host.endsWith("googlevideo.com") || !uri.path.orEmpty().startsWith("/videoplayback") || uri.getQueryParameter("rn") != null) return url
         uri.buildUpon()
             .appendQueryParameter("rn", playbackRequestNumber.getAndIncrement().toString())
             .build()
@@ -162,6 +162,7 @@ object AudioStreamResolver {
                 synchronized(streamCache) {
                     streamCache[key] = StreamCacheEntry(expiry, cached)
                 }
+                lastResolvedProvider[videoId] = cached.source
                 return cached
             }
         }
@@ -182,6 +183,7 @@ object AudioStreamResolver {
                 streamCache[key] = StreamCacheEntry(expiresAt, cachedStream)
                 while (streamCache.size > 100) streamCache.remove(streamCache.keys.firstOrNull())
             }
+            lastResolvedProvider[videoId] = cachedStream.source
             runCatching { persistentWriter?.invoke(videoId, quality, cachedStream, expiresAt) }
             mine.complete(cachedStream)
             return cachedStream
@@ -202,11 +204,12 @@ object AudioStreamResolver {
             val entries = streamCache.filterKeys { it.startsWith("$videoId:") }.values.toList()
             streamCache.keys.filter { it.startsWith("$videoId:") }.toList().forEach(streamCache::remove)
             entries.map { it.stream.source }.distinct()
-        }
+        }.ifEmpty { listOfNotNull(lastResolvedProvider[videoId]) }
         val until = System.currentTimeMillis() + PROVIDER_BACKOFF_MS
         failedProviders.computeIfAbsent(videoId) { ConcurrentHashMap() }.also { map ->
             failed.forEach { source -> map[source] = until }
         }
+        lastResolvedProvider.remove(videoId)
         runCatching { persistentInvalidator?.invoke(videoId) }
     }
 
