@@ -50,8 +50,8 @@ object AudioStreamResolver {
     const val ANDROID_USER_AGENT =
         "com.google.android.youtube/19.45.38 (Linux; U; Android 14) gzip"
 
-    const val STREAM_CACHE_TAG = "|flux-resolver-v6"
-    const val STREAM_CACHE_TTL_MS = 30 * 60 * 1000L
+    const val STREAM_CACHE_TAG = "|flux-resolver-v7"
+    const val STREAM_CACHE_TTL_MS = 3 * 60 * 1000L
 
     private const val INNERTUBE_PLAYER_ENDPOINT =
         "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false"
@@ -393,7 +393,8 @@ object AudioStreamResolver {
         val upstreamExpiry = runCatching {
             extractQueryParam(stream.url, "expire")?.toLongOrNull()?.times(1000L)
         }.getOrNull()
-        val fallback = now + 8 * 60 * 1000L
+        // Match the previous Flutter implementation's three-minute manifest cache.
+        val fallback = now + 3 * 60 * 1000L
         val safeExpiry = upstreamExpiry?.minus(60_000L) ?: fallback
         return minOf(safeExpiry, now + STREAM_CACHE_TTL_MS)
     }
@@ -403,11 +404,14 @@ object AudioStreamResolver {
         // Each provider is attempted in order; failures are isolated so one dead endpoint
         // cannot prevent the remaining extractors from being tried.
         val providers: List<Pair<String, () -> List<ResolvedAudioStream>>> = listOf(
+            // Primary path mirrors the old Flutter YoutubeExplode call:
+            // fetch the YouTube watch page, parse its player response and
+            // collect audio-only formats before trying alternate providers.
+            "newpipe" to { resolveViaNewPipe(videoId, quality) },
             "innertube_vr" to { resolveViaInnerTubeVr(videoId, quality) },
             "innertube_ios" to { resolveViaInnerTubeIos(videoId, quality) },
             "innertube_android" to { resolveViaInnerTubeAndroid(videoId, quality) },
             "innertube_tv" to { resolveViaInnerTubeTvEmbedded(videoId, quality) },
-            "newpipe" to { resolveViaNewPipe(videoId, quality) },
             "piped" to { resolveViaPiped(videoId, quality) },
             "invidious" to { resolveViaInvidious(videoId, quality) }
         )
@@ -720,25 +724,23 @@ object AudioStreamResolver {
         quality: AudioQuality
     ): List<ResolvedAudioStream> {
         if (candidates.isEmpty()) return emptyList()
-        // Slightly prefer AAC/MP4 (itag 140) when bitrates are comparable for universal Android codec support,
-        // while keeping WebM/Opus in the fallback chain.
-        val sorted = candidates.sortedWith(
-            compareByDescending<ResolvedAudioStream> { it.bitrateKbps }
-                .thenByDescending { it.mimeType.contains("mp4", ignoreCase = true) }
-        )
-        val ordered = when (quality) {
-            AudioQuality.HIGH -> sorted
-            AudioQuality.DATA_SAVER -> {
-                val low = sorted.filter { it.bitrateKbps in 32..96 }.sortedBy { it.bitrateKbps }
-                low + sorted.reversed()
-            }
-            AudioQuality.AUTO -> {
-                val balanced = sorted.filter { it.bitrateKbps in 96..160 }
-                val fallback = sorted.filter { it.bitrateKbps in 64..192 }
-                balanced + fallback + sorted
-            }
+        // Match the previous Flutter app's format selection:
+        // highest bitrate for High; closest to 96 kbps or 128 kbps otherwise.
+        // Prefer AAC/MP4 when two formats have the same score.
+        val targetBitrate = when (quality) {
+            AudioQuality.DATA_SAVER -> 96
+            AudioQuality.AUTO -> 128
+            AudioQuality.HIGH -> Int.MAX_VALUE
         }
-        return ordered.distinctBy { it.url }
+        return candidates
+            .distinctBy { it.url }
+            .sortedWith(
+                compareBy<ResolvedAudioStream> {
+                    if (quality == AudioQuality.HIGH) -it.bitrateKbps
+                    else kotlin.math.abs(it.bitrateKbps - targetBitrate)
+                }.thenByDescending { it.mimeType.contains("mp4", ignoreCase = true) }
+                    .thenByDescending { it.bitrateKbps }
+            )
     }
 
     fun clearStreamCache() {
@@ -776,8 +778,8 @@ object AudioStreamResolver {
         override fun execute(request: Request): Response {
             val connection = (URL(request.url()).openConnection() as HttpURLConnection).apply {
                 requestMethod = request.httpMethod()
-                connectTimeout = 6000
-                readTimeout = 10000
+                connectTimeout = 12000
+                readTimeout = 25000
                 instanceFollowRedirects = true
                 val hasCustomUa = request.headers()?.keys?.any { it.equals("User-Agent", true) } == true
                 if (!hasCustomUa) setRequestProperty("User-Agent", USER_AGENT)
