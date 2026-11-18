@@ -7,7 +7,7 @@ FluxMusic is a native Android music player built with Kotlin, Jetpack Compose, R
 - Home discovery with language filters and featured music artwork.
 - YouTube Music catalogue search with recent-search history.
 - Audio playback through the native Media3 player and a foreground media service.
-- yt-dlp-based YouTube audio stream resolution with QuickJS runtime support.
+- Native YouTube Innertube player API audio stream resolution (no yt-dlp, Python or QuickJS).
 - Background playback, notification/media controls, queue management, seek, previous/next, shuffle and repeat.
 - Mini-player and expanded now-playing screen.
 - Liked Songs, recently played tracks and user-created playlists.
@@ -41,6 +41,6 @@ GitHub Actions runs unit tests and builds a debug APK on pushes and pull request
 
 ## Playback and provider limitations
 
-Online catalogue metadata is retrieved from YouTube Music endpoints and stream URLs are resolved by yt-dlp. These are upstream services outside FluxMusic's control; availability can change due to region, network, account, age, bot-detection or provider-side changes. The app does not guarantee every track is playable in every region or network.
+Online catalogue metadata and native player requests use YouTube Music endpoints. YouTube may withhold direct media URLs, require a PO token or sign-in, or return ciphered formats. The native resolver deliberately rejects formats it cannot play rather than launching a heavyweight external extractor. Availability can change due to region, network, account, age, bot-detection or provider-side changes; no third-party client can guarantee every track is playable.
 
 FluxMusic is an independent project and is not affiliated with YouTube or Google. Users are responsible for complying with applicable laws, copyright rules and provider terms. Do not use the app to download, redistribute or exploit copyrighted material without authorization.
