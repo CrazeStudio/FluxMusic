@@ -448,6 +448,11 @@ object AudioStreamResolver {
         quality: AudioQuality
     ): List<ResolvedAudioStream> {
         val watchPage = fetchWatchPageSession(videoId)
+        // VISIONOS requires visitorData in the client context. Sending it only as
+        // X-Goog-Visitor-Id is not sufficient and can make /player return LOGIN_REQUIRED.
+        val visitorData = watchPage.visitorData?.takeIf { it.isNotBlank() }
+            ?: throw IOException("YouTube watch page did not provide visitorData for VISIONOS playback")
+
         val client = JSONObject()
             .put("clientName", "VISIONOS")
             .put("clientVersion", "1.02")
@@ -456,7 +461,9 @@ object AudioStreamResolver {
             .put("userAgent", VISIONOS_USER_AGENT)
             .put("osName", "visionOS")
             .put("osVersion", "26.5.23O471")
+            .put("visitorData", visitorData)
             .put("hl", "en")
+            .put("gl", "US")
             .put("timeZone", "UTC")
             .put("utcOffsetMinutes", 0)
 
@@ -473,7 +480,7 @@ object AudioStreamResolver {
             readTimeout = 25000
             doOutput = true
             setRequestProperty("User-Agent", VISIONOS_USER_AGENT)
-            setRequestProperty("X-YouTube-Client-Name", "VISIONOS")
+            setRequestProperty("X-YouTube-Client-Name", "101")
             setRequestProperty("X-YouTube-Client-Version", "1.02")
             setRequestProperty("Origin", "https://www.youtube.com")
             setRequestProperty("Sec-Fetch-Mode", "navigate")
