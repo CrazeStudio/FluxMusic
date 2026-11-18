@@ -3,24 +3,23 @@ package com.crazestudio.fluxmusic.data.remote
 import android.content.Context
 import android.net.Uri
 import com.crazestudio.fluxmusic.data.model.AudioQuality
-import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.mapper.VideoFormat
-import com.yausername.youtubedl_android.mapper.VideoInfo
+import org.json.JSONObject
 import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.Callable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
 data class ResolvedAudioStream(
     val url: String,
     val userAgent: String,
-    val source: String = "yt-dlp",
+    val source: String = "YouTube Music native",
     val expiresAt: Long = 0L,
     val mimeType: String = "",
     val bitrateKbps: Int = 0,
@@ -28,100 +27,49 @@ data class ResolvedAudioStream(
 )
 
 /**
- * The only YouTube playback extractor in FluxMusic.
+ * Native YouTube Innertube player resolver. No Python, yt-dlp, QuickJS,
+ * subprocess, or third-party extraction runtime is used.
  *
- * yt-dlp and its bundled QuickJS runtime perform extraction on worker threads.
- * Signed media URLs are kept in memory only and are never written to Room.
+ * YouTube may withhold direct URLs, require a PO token, or return ciphered
+ * formats. Those cases are reported explicitly rather than pretending a
+ * non-playable URL is usable.
  */
 object AudioStreamResolver {
     const val USER_AGENT = YtMusicCatalog.USER_AGENT
     const val STREAM_CACHE_TTL_MS = 4 * 60 * 1000L
 
+    private const val PLAYER_ENDPOINT = "https://music.youtube.com/youtubei/v1/player?prettyPrint=false"
+    private const val CLIENT_VERSION = "1.20261116.01.00"
     private const val MAX_CACHE_ENTRIES = 80
     private const val FAILED_URL_BACKOFF_MS = 60_000L
-    private const val INIT_TIMEOUT_SECONDS = 120L
 
-    private data class CacheEntry(
-        val expiresAt: Long,
-        val candidates: List<ResolvedAudioStream>
-    )
-
-    private val initExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "FluxMusic-yt-dlp-init").apply { isDaemon = true }
+    private data class CacheEntry(val expiresAt: Long, val candidates: List<ResolvedAudioStream>)
+    private val executor = Executors.newFixedThreadPool(2) { r ->
+        Thread(r, "FluxMusic-native-player").apply { isDaemon = true }
     }
-    private val workerExecutor = Executors.newFixedThreadPool(2) { runnable ->
-        Thread(runnable, "FluxMusic-yt-dlp-worker").apply { isDaemon = true }
-    }
-    private val requestNumber = AtomicLong(0L)
     private val inFlight = ConcurrentHashMap<String, FutureTask<List<ResolvedAudioStream>>>()
     private val failedUrls = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
     private val streamCache = LinkedHashMap<String, CacheEntry>(64, 0.75f, true)
+    private val requestNumber = AtomicLong(0L)
 
-    @Volatile
-    private var applicationContext: Context? = null
-
-    @Volatile
-    private var initialization: FutureTask<Unit>? = null
-
-    /** Starts extraction runtime initialization without blocking Application.onCreate(). */
     fun initialize(context: Context) {
-        applicationContext = context.applicationContext
-        if (initialization != null) return
-
-        synchronized(this) {
-            if (initialization != null) return
-            val app = context.applicationContext
-            val task = FutureTask(Callable {
-                YoutubeDL.getInstance().init(app)
-                Unit
-            })
-            initialization = task
-            initExecutor.execute(task)
-        }
+        // Native resolver has no runtime to unpack or initialize.
     }
 
-    /** Compatibility with the playback service: initialization is already asynchronous. */
     fun warmUp() {
-        applicationContext?.let(::initialize)
+        // Kept for compatibility with the service lifecycle.
     }
 
-    private fun awaitInitialized() {
-        val task = initialization
-            ?: throw IOException("yt-dlp is not initialized. Restart FluxMusic and try again.")
-        try {
-            task.get(INIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        } catch (e: TimeoutException) {
-            throw IOException("yt-dlp initialization timed out. Please retry.", e)
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-            throw IOException("yt-dlp initialization was interrupted.", e)
-        } catch (e: ExecutionException) {
-            val cause = e.cause ?: e
-            synchronized(this) {
-                if (initialization === task) initialization = null
-            }
-            applicationContext?.let(::initialize)
-            throw IOException("yt-dlp could not initialize: ${cause.message ?: "unknown error"}", cause)
-        }
-    }
-
-    /**
-     * YouTube accepts the rn request counter on googlevideo media URLs.
-     * Keep the original signed query intact and replace only rn.
-     */
     fun prepareYoutubePlaybackUrl(url: String): String = runCatching {
         val uri = Uri.parse(url)
         val host = uri.host.orEmpty().lowercase()
-        val isGoogleVideo = host == "googlevideo.com" || host.endsWith(".googlevideo.com")
-        if (!isGoogleVideo || !uri.path.orEmpty().startsWith("/videoplayback")) return url
-
+        val googleVideo = host == "googlevideo.com" || host.endsWith(".googlevideo.com")
+        if (!googleVideo || !uri.path.orEmpty().startsWith("/videoplayback")) return url
         val rn = requestNumber.incrementAndGet().toString()
         val queryIndex = url.indexOf('?')
         if (queryIndex < 0) return "$url?rn=$rn"
-
         val base = url.substring(0, queryIndex)
-        val query = url.substring(queryIndex + 1)
-            .split('&')
+        val query = url.substring(queryIndex + 1).split('&')
             .filter { it.isNotEmpty() && !it.substringBefore('=').equals("rn", true) }
         "$base?${(query + "rn=$rn").joinToString("&")}"
     }.getOrDefault(url)
@@ -133,15 +81,11 @@ object AudioStreamResolver {
     }
 
     fun prefetchAudioUrls(videoIds: List<String>, quality: AudioQuality = AudioQuality.AUTO) {
-        videoIds.asSequence().filter { it.matches(VIDEO_ID) }.distinct().take(2).forEach { videoId ->
-            val key = cacheKey(videoId, quality)
-            val cached = synchronized(streamCache) {
-                streamCache[key]?.let { it.expiresAt > System.currentTimeMillis() } == true
-            }
-            if (!cached && !inFlight.containsKey(key)) {
-                workerExecutor.execute {
-                    runCatching { resolveCandidateStreams(videoId, quality) }
-                }
+        videoIds.asSequence().filter { VIDEO_ID.matches(it) }.distinct().take(2).forEach { id ->
+            val key = cacheKey(id, quality)
+            val valid = synchronized(streamCache) { streamCache[key]?.expiresAt?.let { it > System.currentTimeMillis() } == true }
+            if (!valid && !inFlight.containsKey(key)) executor.execute {
+                runCatching { resolveCandidateStreams(id, quality) }
             }
         }
     }
@@ -154,10 +98,9 @@ object AudioStreamResolver {
         quality: AudioQuality = AudioQuality.AUTO,
         forceRefresh: Boolean = false
     ): ResolvedAudioStream {
-        val candidates = resolveCandidateStreams(videoId, quality, forceRefresh)
-        return candidates.firstOrNull { !isUrlFailed(videoId, it.url) }
-            ?: candidates.firstOrNull()
-            ?: throw IOException("yt-dlp returned no playable audio stream.")
+        val streams = resolveCandidateStreams(videoId, quality, forceRefresh)
+        return streams.firstOrNull { !isUrlFailed(videoId, it.url) }
+            ?: throw IOException("No playable YouTube audio URL is currently available.")
     }
 
     fun resolveCandidateStreams(
@@ -168,170 +111,146 @@ object AudioStreamResolver {
         require(VIDEO_ID.matches(videoId)) { "Invalid YouTube video ID" }
         val key = cacheKey(videoId, quality)
         val now = System.currentTimeMillis()
-
-        if (forceRefresh) {
-            invalidateStream(videoId)
-        } else {
-            synchronized(streamCache) {
-                streamCache[key]?.let { entry ->
-                    if (entry.expiresAt > now) {
-                        val available = entry.candidates.filterNot { isUrlFailed(videoId, it.url) }
-                        if (available.isNotEmpty()) return available
-                    }
-                    streamCache.remove(key)
+        if (forceRefresh) invalidateStream(videoId) else synchronized(streamCache) {
+            streamCache[key]?.let { entry ->
+                if (entry.expiresAt > now) {
+                    val usable = entry.candidates.filterNot { isUrlFailed(videoId, it.url) }
+                    if (usable.isNotEmpty()) return usable
                 }
+                streamCache.remove(key)
             }
         }
 
-        val flightKey = if (forceRefresh) "$key:refresh" else key
-        val mine = FutureTask(Callable { extractWithYtDlp(videoId, quality) })
-        val existing = inFlight.putIfAbsent(flightKey, mine)
-        val active = existing ?: mine
-
+        val task = FutureTask(Callable { fetchPlayerStreams(videoId, quality) })
+        val active = inFlight.putIfAbsent(key, task) ?: task
         try {
-            if (existing == null) active.run()
-            val resolved = active.get()
+            if (active === task) active.run()
+            val streams = active.get()
             val resolvedAt = System.currentTimeMillis()
-            val stamped = resolved.map { stream ->
-                stream.copy(expiresAt = calculateExpiry(stream.url, resolvedAt))
-            }
-            // Never hand Media3 a URL that has already crossed its signed expiry
-            // (or the safety margin immediately before it).
-            val playable = stamped.filter { it.expiresAt > resolvedAt }
-            if (playable.isEmpty()) {
-                throw IOException("yt-dlp returned stream URLs that are already expired. Please retry.")
-            }
-            val expiry = playable.minOf { it.expiresAt }
-
+            val usable = streams.map { it.copy(expiresAt = calculateExpiry(it.url, resolvedAt)) }
+                .filter { it.expiresAt > resolvedAt }
+            if (usable.isEmpty()) throw IOException("YouTube returned expired or unusable audio URLs. Retry playback.")
             synchronized(streamCache) {
-                streamCache[key] = CacheEntry(expiry, playable)
-                while (streamCache.size > MAX_CACHE_ENTRIES) {
-                    streamCache.keys.firstOrNull()?.let(streamCache::remove) ?: break
-                }
+                streamCache[key] = CacheEntry(usable.minOf { it.expiresAt }, usable)
+                while (streamCache.size > MAX_CACHE_ENTRIES) streamCache.keys.firstOrNull()?.let(streamCache::remove)
             }
-            return playable.filterNot { isUrlFailed(videoId, it.url) }.ifEmpty { playable }
+            return usable.filterNot { isUrlFailed(videoId, it.url) }.ifEmpty { usable }
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            throw IOException("yt-dlp extraction was interrupted.", e)
+            throw IOException("Native YouTube stream resolution was interrupted.", e)
         } catch (e: ExecutionException) {
             val cause = e.cause ?: e
             if (cause is IOException) throw cause
-            throw IOException("yt-dlp extraction failed: ${cause.message ?: "unknown error"}", cause)
+            throw IOException("Native YouTube stream resolution failed: ${cause.message}", cause)
         } finally {
-            inFlight.remove(flightKey, active)
+            inFlight.remove(key, active)
         }
     }
 
-    private fun extractWithYtDlp(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
-        awaitInitialized()
-
-        val request = YoutubeDLRequest("https://www.youtube.com/watch?v=$videoId")
-            .addOption("--no-playlist")
-            .addOption("--no-warnings")
-            .addOption("--quiet")
-            .addOption("--no-progress")
-            .addOption("--socket-timeout", "12")
-            .addOption("--retries", "1")
-            .addOption("--extractor-retries", "1")
-            .addOption("-f", "bestaudio/best")
-
-        val info = try {
-            YoutubeDL.getInstance().getInfo(request)
-        } catch (e: Exception) {
-            throw IOException("yt-dlp could not extract this YouTube audio: ${e.message ?: e.javaClass.simpleName}", e)
-        }
-
-        val candidates = LinkedHashMap<String, ResolvedAudioStream>()
-        info.formats.orEmpty().forEach { format ->
-            toAudioStream(format, info)?.let { candidates[it.url] = it }
-        }
-
-        // yt-dlp's selected direct URL is included even when the format mapper
-        // does not expose that exact format in its formats array.
-        info.url?.takeIf(::isDirectHttpsMedia)?.let { selectedUrl ->
-            if (!candidates.containsKey(selectedUrl)) {
-                val selectedFormat = info.formats.orEmpty().firstOrNull { it.url == selectedUrl }
-                candidates[selectedUrl] = ResolvedAudioStream(
-                    url = selectedUrl,
-                    userAgent = userAgent(info.httpHeaders),
-                    source = "yt-dlp",
-                    mimeType = selectedFormat?.let(::mimeType).orEmpty(),
-                    bitrateKbps = selectedFormat?.let(::bitrateKbps) ?: 0,
-                    extraHeaders = safeHeaders(info.httpHeaders)
-                )
-            }
-        }
-
-        val ordered = orderCandidates(candidates.values.toList(), quality)
-        if (ordered.isEmpty()) {
-            throw IOException("yt-dlp found no direct audio-only URL for this video.")
-        }
-        return ordered
-    }
-
-    private fun toAudioStream(format: VideoFormat, info: VideoInfo): ResolvedAudioStream? {
-        val url = format.url?.takeIf(::isDirectHttpsMedia) ?: return null
-        val audioCodec = format.acodec.orEmpty()
-        val videoCodec = format.vcodec.orEmpty()
-        if (audioCodec.isBlank() || audioCodec.equals("none", ignoreCase = true)) return null
-        if (videoCodec.isNotBlank() && !videoCodec.equals("none", ignoreCase = true)) return null
-
-        val headers = format.httpHeaders?.takeIf { it.isNotEmpty() } ?: info.httpHeaders
-        return ResolvedAudioStream(
-            url = url,
-            userAgent = userAgent(headers),
-            source = "yt-dlp",
-            mimeType = mimeType(format),
-            bitrateKbps = bitrateKbps(format),
-            extraHeaders = safeHeaders(headers)
+    private fun fetchPlayerStreams(videoId: String, quality: AudioQuality): List<ResolvedAudioStream> {
+        val clients = listOf(
+            Triple("WEB_REMIX", CLIENT_VERSION, USER_AGENT),
+            Triple("ANDROID_MUSIC", "8.10.52", "com.google.android.apps.youtube.music/8.10.52 (Linux; U; Android 12; en_US) gzip")
         )
-    }
+        var lastMessage = "YouTube did not return playable audio formats."
+        for ((clientName, version, agent) in clients) {
+            val client = JSONObject()
+                .put("clientName", clientName)
+                .put("clientVersion", version)
+                .put("hl", "en")
+                .put("gl", "IN")
+            if (clientName == "ANDROID_MUSIC") client.put("androidSdkVersion", 31)
+            val body = JSONObject()
+                .put("context", JSONObject().put("client", client))
+                .put("videoId", videoId)
+                .put("contentCheckOk", true)
+                .put("racyCheckOk", true)
 
-    fun orderCandidates(
-        candidates: List<ResolvedAudioStream>,
-        quality: AudioQuality
-    ): List<ResolvedAudioStream> {
-        val indexed = candidates.withIndex()
-        val sorted = when (quality) {
-            AudioQuality.DATA_SAVER -> {
-                val sorted = indexed.sortedWith(
-                    compareByDescending<IndexedValue<ResolvedAudioStream>> { it.value.bitrateKbps }
-                        .thenBy { mp4Preference(it.value.mimeType) }
-                        .thenBy { it.index }
-                )
-                sorted.filter { it.value.bitrateKbps in 32..96 } +
-                    sorted.asReversed()
+            val response = postPlayer(body.toString(), agent)
+            val status = response.optJSONObject("playabilityStatus")
+            val state = status?.optString("status").orEmpty()
+            if (state.isNotBlank() && state != "OK") {
+                lastMessage = status?.optString("reason")?.takeIf { it.isNotBlank() }
+                    ?: "YouTube playback is unavailable for this video ($state)."
+                continue
             }
-            AudioQuality.AUTO -> {
-                val sorted = indexed.sortedWith(
-                    compareByDescending<IndexedValue<ResolvedAudioStream>> { it.value.bitrateKbps }
-                        .thenBy { mp4Preference(it.value.mimeType) }
-                        .thenBy { it.index }
-                )
-                val balanced = sorted.filter { it.value.bitrateKbps in 96..160 }
-                val fallback = sorted.filter { it.value.bitrateKbps in 64..192 }
-                (balanced + fallback + sorted).distinctBy { it.value.url }
+
+            val streaming = response.optJSONObject("streamingData") ?: run {
+                lastMessage = "YouTube did not provide streaming data. It may require a PO token or sign-in."
+                continue
             }
-            AudioQuality.HIGH -> indexed.sortedWith(
-                compareByDescending<IndexedValue<ResolvedAudioStream>> { it.value.bitrateKbps }
-                    .thenBy { mp4Preference(it.value.mimeType) }
-                    .thenBy { it.index }
-            )
+            val formats = streaming.optJSONArray("adaptiveFormats")
+            val found = ArrayList<ResolvedAudioStream>()
+            if (formats != null) for (i in 0 until formats.length()) {
+                val f = formats.optJSONObject(i) ?: continue
+                val mime = f.optString("mimeType")
+                if (!mime.startsWith("audio/")) continue
+                // Only direct URLs are safe to hand to Media3. Ciphered URLs need
+                // YouTube's changing JavaScript signature algorithm and are skipped.
+                val direct = f.optString("url").takeIf { it.startsWith("https://") } ?: continue
+                val codecs = Regex("codecs=\"([^\"]+)\"").find(mime)?.groupValues?.getOrNull(1).orEmpty()
+                found += ResolvedAudioStream(
+                    url = direct,
+                    userAgent = agent,
+                    source = "YouTube Innertube ($clientName)",
+                    mimeType = mime.substringBefore(';'),
+                    bitrateKbps = (f.optInt("averageBitrate", f.optInt("bitrate", 0)) / 1000),
+                    extraHeaders = mapOf(
+                        "Origin" to "https://music.youtube.com",
+                        "Referer" to "https://music.youtube.com/"
+                    )
+                )
+            }
+            if (found.isNotEmpty()) return orderCandidates(found.distinctBy { it.url }, quality)
+            lastMessage = "YouTube returned only ciphered or token-protected formats; no direct audio URL was exposed."
         }
-        return sorted.map { it.value }
+        throw IOException(lastMessage)
     }
 
-    fun markCandidateSucceeded(
-        videoId: String,
-        quality: AudioQuality,
-        stream: ResolvedAudioStream
-    ) {
+    private fun postPlayer(payload: String, userAgent: String): JSONObject {
+        val connection = (URL(PLAYER_ENDPOINT).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 8_000
+            readTimeout = 10_000
+            doOutput = true
+            setRequestProperty("User-Agent", userAgent)
+            setRequestProperty("Content-Type", "application/json")
+            setRequestProperty("Origin", "https://music.youtube.com")
+            setRequestProperty("Referer", "https://music.youtube.com/")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            connection.outputStream.use { it.write(payload.toByteArray(StandardCharsets.UTF_8)) }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val raw = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (code !in 200..299) throw IOException("YouTube player API HTTP $code: ${raw.take(180)}")
+            return JSONObject(raw)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun orderCandidates(candidates: List<ResolvedAudioStream>, quality: AudioQuality): List<ResolvedAudioStream> {
+        val sorted = candidates.sortedWith(
+            compareByDescending<ResolvedAudioStream> { it.bitrateKbps }
+                .thenBy { if (it.mimeType.contains("mp4", true)) 0 else 1 }
+        )
+        return when (quality) {
+            AudioQuality.DATA_SAVER -> sorted.filter { it.bitrateKbps in 32..96 } + sorted.filterNot { it.bitrateKbps in 32..96 }
+            AudioQuality.AUTO -> {
+                val preferred = sorted.filter { it.bitrateKbps in 96..160 }
+                (preferred + sorted).distinctBy { it.url }
+            }
+            AudioQuality.HIGH -> sorted
+        }
+    }
+
+    fun markCandidateSucceeded(videoId: String, quality: AudioQuality, stream: ResolvedAudioStream) {
         synchronized(streamCache) {
             val key = cacheKey(videoId, quality)
             streamCache[key]?.let { entry ->
-                streamCache[key] = entry.copy(
-                    candidates = listOf(stream) + entry.candidates.filterNot { it.url == stream.url }
-                )
+                streamCache[key] = entry.copy(candidates = listOf(stream) + entry.candidates.filterNot { it.url == stream.url })
             }
         }
     }
@@ -343,80 +262,27 @@ object AudioStreamResolver {
             streamCache.keys.filter { it.startsWith("$videoId:") }.toList().forEach { key ->
                 val entry = streamCache[key] ?: return@forEach
                 val remaining = entry.candidates.filterNot { it.url == stream.url }
-                if (remaining.isEmpty()) streamCache.remove(key)
-                else streamCache[key] = entry.copy(candidates = remaining)
+                if (remaining.isEmpty()) streamCache.remove(key) else streamCache[key] = entry.copy(candidates = remaining)
             }
         }
     }
 
-    fun markPlaybackFailed(videoId: String) {
-        invalidateStream(videoId)
-    }
-
-    fun clearFailuresFor(videoId: String) {
-        failedUrls.remove(videoId)
-        invalidateStream(videoId)
-    }
-
-    fun clearStreamCache() {
-        synchronized(streamCache) { streamCache.clear() }
-        failedUrls.clear()
-    }
+    fun markPlaybackFailed(videoId: String) = invalidateStream(videoId)
+    fun clearFailuresFor(videoId: String) { failedUrls.remove(videoId); invalidateStream(videoId) }
+    fun clearStreamCache() { synchronized(streamCache) { streamCache.clear() }; failedUrls.clear() }
 
     private fun isUrlFailed(videoId: String, url: String): Boolean {
         val map = failedUrls[videoId] ?: return false
         val until = map[url] ?: return false
-        if (until <= System.currentTimeMillis()) {
-            map.remove(url, until)
-            if (map.isEmpty()) failedUrls.remove(videoId, map)
-            return false
-        }
+        if (until <= System.currentTimeMillis()) { map.remove(url, until); return false }
         return true
     }
 
     internal fun calculateExpiry(url: String, now: Long): Long {
-        val upstreamExpiry = runCatching {
-            Uri.parse(url).getQueryParameter("expire")?.toLongOrNull()?.times(1000L)
-        }.getOrNull()
-        // A signed URL must expire from our cache before the provider's deadline.
-        // Do not extend an almost-expired URL with a minimum TTL.
-        return minOf(upstreamExpiry?.minus(45_000L) ?: (now + STREAM_CACHE_TTL_MS), now + STREAM_CACHE_TTL_MS)
+        val upstream = runCatching { Uri.parse(url).getQueryParameter("expire")?.toLongOrNull()?.times(1000L) }.getOrNull()
+        return minOf(upstream?.minus(45_000L) ?: (now + STREAM_CACHE_TTL_MS), now + STREAM_CACHE_TTL_MS)
     }
 
-    private fun isDirectHttpsMedia(url: String): Boolean =
-        url.startsWith("https://", ignoreCase = true) &&
-            !url.contains(".m3u8", ignoreCase = true) &&
-            !url.contains("manifest", ignoreCase = true)
-
-    private fun bitrateKbps(format: VideoFormat): Int =
-        maxOf(format.abr, format.tbr).coerceAtLeast(0)
-
-    private fun mimeType(format: VideoFormat): String = when (format.ext.orEmpty().lowercase()) {
-        "m4a", "mp4" -> "audio/mp4"
-        "webm" -> "audio/webm"
-        "opus" -> "audio/ogg"
-        "mp3" -> "audio/mpeg"
-        "aac" -> "audio/aac"
-        else -> ""
-    }
-
-    private fun userAgent(headers: Map<String, String>?): String =
-        headers?.entries?.firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }
-            ?.value?.takeIf { it.isNotBlank() } ?: USER_AGENT
-
-    private fun safeHeaders(headers: Map<String, String>?): Map<String, String> =
-        headers.orEmpty().filterKeys { key ->
-            !key.equals("User-Agent", true) &&
-                !key.equals("Host", true) &&
-                !key.equals("Content-Length", true) &&
-                !key.equals("Connection", true) &&
-                !key.equals("Accept-Encoding", true)
-        }
-
-    private fun mp4Preference(mimeType: String): Int =
-        if (mimeType.equals("audio/mp4", ignoreCase = true)) 0 else 1
-
-    private fun cacheKey(videoId: String, quality: AudioQuality) = "$videoId:${quality.name}"
-
+    private fun cacheKey(id: String, quality: AudioQuality) = "$id:${quality.name}"
     private val VIDEO_ID = Regex("[A-Za-z0-9_-]{6,20}")
 }
