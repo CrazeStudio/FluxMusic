@@ -136,7 +136,7 @@ class MusicRepository(
                 val found = YtMusicCatalog.search(query, languageHint)
                 cacheTracksPreservingFavorites(found)
                 if (found.isNotEmpty()) {
-                    YtMusicCatalog.prefetchAudioUrls(found.take(2).map { it.id }, prefs.audioQuality)
+                    AudioStreamResolver.prefetchAudioUrls(found.take(2).map { it.id }, prefs.audioQuality)
                 }
                 val existingMap = trackDao.getTracksByIds(found.map { it.id }).associateBy { it.id }
                 found.map { track ->
