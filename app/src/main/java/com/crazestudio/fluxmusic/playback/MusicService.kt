@@ -1,6 +1,5 @@
 package com.crazestudio.fluxmusic.playback
 
-import android.net.Uri
 import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -10,15 +9,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DataSpec
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.ResolvingDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
@@ -28,7 +20,6 @@ import com.crazestudio.fluxmusic.FluxApplication
 import com.crazestudio.fluxmusic.data.model.AudioQuality
 import com.crazestudio.fluxmusic.data.model.EqualizerPreset
 import com.crazestudio.fluxmusic.data.model.Track
-import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
@@ -71,6 +62,7 @@ class MusicService : MediaSessionService() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private lateinit var engine: PlaybackEngine
     private lateinit var player: ExoPlayer
     private var mediaSession: MediaSession? = null
     private val audioEffects = AudioEffectsManager()
@@ -80,9 +72,6 @@ class MusicService : MediaSessionService() {
 
     @Volatile
     private var offlineCacheMode: Boolean = false
-
-    @Volatile
-    private var forceRefreshNextVideoId: String? = null
 
     private var autoRetriedVideoId: String? = null
     private var stallWatchdogJob: Job? = null
@@ -95,61 +84,8 @@ class MusicService : MediaSessionService() {
         super.onCreate()
         val app = application as FluxApplication
 
-        val httpFactory = DefaultHttpDataSource.Factory()
-            .setUserAgent(YtMusicCatalog.USER_AGENT)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(8000)
-            .setReadTimeoutMs(15000)
-
-        val resolvingFactory = ResolvingDataSource.Factory(httpFactory) { dataSpec: DataSpec ->
-            val videoId = Track.extractVideoId(dataSpec.uri)
-            if (videoId != null) {
-                if (offlineCacheMode) throw IOException("Offline Cache Mode is enabled. Disable it in Settings to stream.")
-                val shouldRefresh = forceRefreshNextVideoId == videoId
-                if (shouldRefresh) forceRefreshNextVideoId = null
-                val resolved = YtMusicCatalog.resolveAudioStream(videoId, currentQuality, shouldRefresh)
-                val visionOs = resolved.userAgent == YtMusicCatalog.VISIONOS_USER_AGENT
-                val headers = HashMap(dataSpec.httpRequestHeaders).apply {
-                    put("User-Agent", resolved.userAgent)
-                    put("Accept-Encoding", "identity")
-                    if (visionOs) put("TE", "trailers")
-                }
-                return@Factory dataSpec.buildUpon()
-                    .setUri(Uri.parse(resolved.url))
-                    .setHttpRequestHeaders(headers)
-                    .build()
-            }
-
-            dataSpec
-        }
-
-        val extractorsFactory = DefaultExtractorsFactory()
-            .setConstantBitrateSeekingEnabled(true)
-
-        val mediaSourceFactory = DefaultMediaSourceFactory(resolvingFactory, extractorsFactory)
-            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(1))
-
-        val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15_000, 45_000, 400, 1_200)
-            .setPrioritizeTimeOverSizeThresholds(true)
-            .build()
-
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(C.USAGE_MEDIA)
-            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-            .build()
-
-        val trackSelector = DefaultTrackSelector(this).apply {
-            setParameters(buildUponParameters().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build())
-        }
-
-        player = ExoPlayer.Builder(this)
-            .setMediaSourceFactory(mediaSourceFactory)
-            .setTrackSelector(trackSelector)
-            .setLoadControl(loadControl)
-            .setAudioAttributes(audioAttributes, true)
-            .setHandleAudioBecomingNoisy(true)
-            .build()
+        engine = PlaybackEngine(this, AudioStreamResolver)
+        player = engine.createPlayer()
 
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -182,8 +118,7 @@ class MusicService : MediaSessionService() {
                 val currentId = player.currentMediaItem?.mediaId.orEmpty()
                 if (currentId.isNotBlank() && !offlineCacheMode && autoRetriedVideoId != currentId) {
                     autoRetriedVideoId = currentId
-                    forceRefreshNextVideoId = currentId
-                    YtMusicCatalog.invalidateStream(currentId)
+                    AudioStreamResolver.invalidateStream(currentId)
                     val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                     player.seekTo(idx, 0L)
                     player.prepare()
@@ -202,8 +137,9 @@ class MusicService : MediaSessionService() {
             app.preferencesRepository.preferencesFlow.collect { prefs ->
                 currentQuality = prefs.audioQuality
                 offlineCacheMode = prefs.offlineCacheMode
+                engine.updateConfiguration(currentQuality, offlineCacheMode)
                 if (!offlineCacheMode) {
-                    YtMusicCatalog.warmUp()
+                    AudioStreamResolver.warmUp()
                 }
                 currentSpeed = prefs.playbackSpeed
                 if (player.playbackParameters.speed != currentSpeed) {
@@ -244,8 +180,7 @@ class MusicService : MediaSessionService() {
                 autoRetriedVideoId != currentId
             ) {
                 autoRetriedVideoId = currentId
-                forceRefreshNextVideoId = currentId
-                YtMusicCatalog.invalidateStream(currentId)
+                AudioStreamResolver.invalidateStream(currentId)
                 val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                 player.seekTo(idx, 0L)
                 player.prepare()
@@ -269,7 +204,7 @@ class MusicService : MediaSessionService() {
             }
         }
         if (upcomingIds.isNotEmpty()) {
-            YtMusicCatalog.prefetchAudioUrls(upcomingIds, currentQuality)
+            AudioStreamResolver.prefetchAudioUrls(upcomingIds, currentQuality)
         }
     }
 
@@ -435,8 +370,7 @@ class MusicService : MediaSessionService() {
                     val currentId = player.currentMediaItem?.mediaId.orEmpty()
                     if (currentId.isNotBlank()) {
                         autoRetriedVideoId = null
-                        forceRefreshNextVideoId = currentId
-                        YtMusicCatalog.invalidateStream(currentId)
+                            AudioStreamResolver.invalidateStream(currentId)
                     }
                     val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                     player.seekTo(idx, 0L)
