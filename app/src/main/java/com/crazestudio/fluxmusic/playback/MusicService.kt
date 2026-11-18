@@ -84,7 +84,7 @@ class MusicService : MediaSessionService() {
         super.onCreate()
         val app = application as FluxApplication
 
-        engine = PlaybackEngine(this, AudioStreamResolver)
+        engine = PlaybackEngine(this)
         player = engine.createPlayer()
 
         player.addListener(object : Player.Listener {
