@@ -452,7 +452,7 @@ object AudioStreamResolver {
             val playability = root.optJSONObject("playabilityStatus")
             val playabilityStatus = playability?.optString("status", "").orEmpty()
             if (playabilityStatus.isNotBlank() && !playabilityStatus.equals("OK", ignoreCase = true)) {
-                val reason = playability.optString("reason", "")
+                val reason = playability?.optString("reason", "").orEmpty()
                 throw IOException("${profile.name} playback status $playabilityStatus: $reason".trim())
             }
             val playbackHeaders = LinkedHashMap<String, String>()
