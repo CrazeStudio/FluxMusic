@@ -59,6 +59,7 @@ class MusicService : MediaSessionService() {
         const val EXTRA_SLEEP_REMAINING_SEC = "extra_sleep_remaining_sec"
         const val EXTRA_SLEEP_END_OF_TRACK = "extra_sleep_end_of_track"
         const val EXTRA_SPEED = "extra_speed"
+        const val EXTRA_AUTO_RETRYING = "extra_auto_retrying"
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -73,7 +74,9 @@ class MusicService : MediaSessionService() {
     @Volatile
     private var offlineCacheMode: Boolean = false
 
-    private var autoRetriedVideoId: String? = null
+    private var autoRetryVideoId: String? = null
+    private var autoRetryAttempts: Int = 0
+    private var isAutoRetrying: Boolean = false
     private var stallWatchdogJob: Job? = null
     private var sleepJob: Job? = null
     private var sleepRemainingSec: Int = 0
@@ -83,6 +86,8 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val app = application as FluxApplication
+        // Ensure persistent stream cache store is attached even if service starts before MainActivity.
+        app.repository
 
         engine = PlaybackEngine(this)
         player = engine.createPlayer()
@@ -93,7 +98,9 @@ class MusicService : MediaSessionService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                autoRetriedVideoId = null
+                autoRetryVideoId = mediaItem?.mediaId
+                autoRetryAttempts = 0
+                isAutoRetrying = false
                 if (sleepEndOfTrack && reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
                     player.pause()
                     sleepEndOfTrack = false
@@ -101,10 +108,18 @@ class MusicService : MediaSessionService() {
                     broadcastExtras()
                     return
                 }
+                broadcastExtras()
                 prefetchUpcomingTracks()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    autoRetryAttempts = 0
+                    if (isAutoRetrying) {
+                        isAutoRetrying = false
+                        broadcastExtras()
+                    }
+                }
                 updateStallWatchdog()
             }
 
@@ -116,13 +131,20 @@ class MusicService : MediaSessionService() {
                 stallWatchdogJob?.cancel()
                 android.util.Log.e("FluxMusicPlayback", "Playback error ${error.errorCodeName}: ${error.message}", error)
                 val currentId = player.currentMediaItem?.mediaId.orEmpty()
-                if (currentId.isNotBlank() && !offlineCacheMode && autoRetriedVideoId != currentId) {
-                    autoRetriedVideoId = currentId
+                val attemptsForTrack = if (autoRetryVideoId == currentId) autoRetryAttempts else 0
+                if (currentId.isNotBlank() && !offlineCacheMode && attemptsForTrack < 2) {
+                    autoRetryVideoId = currentId
+                    autoRetryAttempts = attemptsForTrack + 1
+                    isAutoRetrying = true
+                    broadcastExtras()
                     AudioStreamResolver.markPlaybackFailed(currentId)
                     val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                     player.seekTo(idx, 0L)
                     player.prepare()
                     player.play()
+                } else {
+                    isAutoRetrying = false
+                    broadcastExtras()
                 }
             }
 
@@ -168,18 +190,22 @@ class MusicService : MediaSessionService() {
         if (offlineCacheMode) return
         if (!player.playWhenReady || player.playbackState != Player.STATE_BUFFERING) return
         val currentId = player.currentMediaItem?.mediaId.orEmpty()
-        if (currentId.isBlank() || autoRetriedVideoId == currentId) return
+        val attemptsForTrack = if (autoRetryVideoId == currentId) autoRetryAttempts else 0
+        if (currentId.isBlank() || attemptsForTrack >= 2) return
 
         stallWatchdogJob = serviceScope.launch {
-            // Stream resolution can require more than one upstream request.
-            delay(30_000L)
+            delay(15_000L)
+            val currentAttempts = if (autoRetryVideoId == currentId) autoRetryAttempts else 0
             if (player.playWhenReady &&
                 player.playbackState == Player.STATE_BUFFERING &&
                 player.currentPosition <= 150L &&
                 player.currentMediaItem?.mediaId == currentId &&
-                autoRetriedVideoId != currentId
+                currentAttempts < 2
             ) {
-                autoRetriedVideoId = currentId
+                autoRetryVideoId = currentId
+                autoRetryAttempts = currentAttempts + 1
+                isAutoRetrying = true
+                broadcastExtras()
                 AudioStreamResolver.markPlaybackFailed(currentId)
                 val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                 player.seekTo(idx, 0L)
@@ -230,6 +256,7 @@ class MusicService : MediaSessionService() {
             putInt(EXTRA_SLEEP_REMAINING_SEC, sleepRemainingSec)
             putBoolean(EXTRA_SLEEP_END_OF_TRACK, sleepEndOfTrack)
             putFloat(EXTRA_SPEED, currentSpeed)
+            putBoolean(EXTRA_AUTO_RETRYING, isAutoRetrying)
         }
         mediaSession?.setSessionExtras(extras)
     }
@@ -369,9 +396,12 @@ class MusicService : MediaSessionService() {
                 CMD_RETRY_FRESH -> {
                     val currentId = player.currentMediaItem?.mediaId.orEmpty()
                     if (currentId.isNotBlank()) {
-                        autoRetriedVideoId = null
-                            AudioStreamResolver.markPlaybackFailed(currentId)
+                        autoRetryVideoId = currentId
+                        autoRetryAttempts = 0
+                        isAutoRetrying = false
+                        AudioStreamResolver.clearFailuresFor(currentId)
                     }
+                    broadcastExtras()
                     val idx = player.currentMediaItemIndex.coerceAtLeast(0)
                     player.seekTo(idx, 0L)
                     player.prepare()

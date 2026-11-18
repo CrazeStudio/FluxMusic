@@ -59,6 +59,7 @@ class PlaybackController(
     private var queueManager: PlaybackQueueManager? = null
     private var tickerJob: Job? = null
     private var pendingPlayRequest: Triple<List<Track>, Int, String>? = null
+    private var serviceAutoRetrying: Boolean = false
 
     fun connect() {
         if (controllerFuture != null) return
@@ -115,13 +116,14 @@ class PlaybackController(
         val activeIdx = c.currentMediaItemIndex.takeIf { it in queueItems.indices } ?: -1
         val activeTrack = queueItems.getOrNull(activeIdx)
         val duration = c.duration.takeIf { it > 0L } ?: activeTrack?.durationMs ?: 0L
+        val isStartingUp = c.playWhenReady && c.playbackState == Player.STATE_IDLE && c.playerError == null
         _state.update {
             it.copy(
                 activeTrack = activeTrack ?: it.activeTrack,
                 queue = if (queueItems.isNotEmpty()) queueItems else it.queue,
                 currentIndex = if (activeIdx >= 0) activeIdx else it.currentIndex,
                 isPlaying = c.isPlaying,
-                isBuffering = c.playbackState == Player.STATE_BUFFERING,
+                isBuffering = c.playbackState == Player.STATE_BUFFERING || isStartingUp || serviceAutoRetrying,
                 positionMs = c.currentPosition.coerceAtLeast(0L),
                 durationMs = duration,
                 shuffleEnabled = c.shuffleModeEnabled,
@@ -315,6 +317,8 @@ class PlaybackController(
         syncFromPlayer()
         if (playbackState == Player.STATE_READY) {
             _state.update { it.copy(playbackError = null, isBuffering = false) }
+        } else if (playbackState == Player.STATE_BUFFERING && controller?.playerError == null) {
+            _state.update { it.copy(playbackError = null, isBuffering = true) }
         }
     }
 
@@ -327,6 +331,10 @@ class PlaybackController(
     }
 
     override fun onPlayerError(error: PlaybackException) {
+        if (serviceAutoRetrying) {
+            _state.update { it.copy(playbackError = null, isBuffering = true) }
+            return
+        }
         val msg = error.cause?.message ?: error.message ?: "Unable to stream this track right now."
         _state.update { it.copy(playbackError = msg, isBuffering = false) }
     }
@@ -336,12 +344,15 @@ class PlaybackController(
         val sleepSec = extras.getInt(MusicService.EXTRA_SLEEP_REMAINING_SEC, 0)
         val sleepEnd = extras.getBoolean(MusicService.EXTRA_SLEEP_END_OF_TRACK, false)
         val speed = extras.getFloat(MusicService.EXTRA_SPEED, _state.value.playbackSpeed)
+        serviceAutoRetrying = extras.getBoolean(MusicService.EXTRA_AUTO_RETRYING, false)
         _state.update {
             it.copy(
                 equalizer = eq,
                 sleepRemainingSec = sleepSec,
                 sleepEndOfTrack = sleepEnd,
-                playbackSpeed = speed
+                playbackSpeed = speed,
+                isBuffering = if (serviceAutoRetrying) true else it.isBuffering,
+                playbackError = if (serviceAutoRetrying) null else it.playbackError
             )
         }
     }
