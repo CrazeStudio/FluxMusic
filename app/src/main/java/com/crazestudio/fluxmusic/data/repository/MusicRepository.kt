@@ -8,6 +8,8 @@ import com.crazestudio.fluxmusic.data.local.db.PlaylistEntity
 import com.crazestudio.fluxmusic.data.local.db.PlaylistSummary
 import com.crazestudio.fluxmusic.data.local.db.RecentPlayEntity
 import com.crazestudio.fluxmusic.data.local.db.SearchHistoryEntity
+import com.crazestudio.fluxmusic.data.local.db.StreamCacheDao
+import com.crazestudio.fluxmusic.data.local.db.StreamCacheEntity
 import com.crazestudio.fluxmusic.data.local.db.TrackDao
 import com.crazestudio.fluxmusic.data.local.db.TrackEntity
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferences
@@ -18,162 +20,174 @@ import com.crazestudio.fluxmusic.data.model.LrcParser
 import com.crazestudio.fluxmusic.data.model.ThemeMode
 import com.crazestudio.fluxmusic.data.model.Track
 import com.crazestudio.fluxmusic.data.model.TrackLyrics
-import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
 import com.crazestudio.fluxmusic.data.remote.LrcLibClient
+import com.crazestudio.fluxmusic.data.remote.ResolvedAudioStream
+import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
 import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
-/**
- * Repository boundary for the FluxMusic data backend.
- *
- * The repository owns local persistence, offline policy, cache freshness and remote
- * orchestration. Screens/ViewModels never call a network client or Room DAO directly.
- */
 class MusicRepository(
     private val trackDao: TrackDao,
     private val playlistDao: PlaylistDao,
     private val historyDao: HistoryDao,
+    private val streamCacheDao: StreamCacheDao,
     private val lyricsDao: LyricsDao,
     private val prefsRepo: UserPreferencesRepository
 ) {
-    companion object {
-        private const val LYRICS_CACHE_TTL_MS = 30L * 24L * 60L * 60L * 1000L
+    init {
+        AudioStreamResolver.attachPersistentStreamStore(
+            reader = { videoId, quality ->
+                runCatching {
+                    runBlocking {
+                        streamCacheDao.getValidStream(videoId, quality.name)?.let { entity ->
+                            entity.userAgent
+                                .takeIf { it.endsWith(AudioStreamResolver.STREAM_CACHE_TAG) }
+                                ?.let { taggedUserAgent ->
+                                    val stored = taggedUserAgent.removeSuffix(AudioStreamResolver.STREAM_CACHE_TAG)
+                                    val separator = stored.lastIndexOf('|')
+                                    val storedAgent = if (separator > 0) stored.substring(0, separator) else stored
+                                    val source = if (separator > 0) stored.substring(separator + 1) else "cache"
+                                    ResolvedAudioStream(
+                                        url = entity.streamUrl,
+                                        userAgent = storedAgent,
+                                        source = source,
+                                        expiresAt = entity.expiresAt
+                                    )
+                                }
+                        }
+                    }
+                }.getOrNull()
+            },
+            writer = { videoId, quality, stream, expiresAt ->
+                runCatching {
+                    runBlocking {
+                        streamCacheDao.upsertStream(
+                            StreamCacheEntity(
+                                videoId = videoId,
+                                quality = quality.name,
+                                streamUrl = stream.url,
+                                userAgent = stream.userAgent + "|" + stream.source + AudioStreamResolver.STREAM_CACHE_TAG,
+                                expiresAt = expiresAt
+                            )
+                        )
+                    }
+                }
+            },
+            invalidator = { videoId ->
+                runCatching {
+                    runBlocking {
+                        streamCacheDao.deleteByVideoId(videoId)
+                    }
+                }
+            }
+        )
     }
 
     val preferences: Flow<UserPreferences> = prefsRepo.preferencesFlow
 
     val cachedTracks: Flow<List<Track>> = trackDao.observeCachedTracks()
-        .map { rows -> rows.map(TrackEntity::toDomain) }
+        .map { list -> list.map { it.toDomain() } }
 
     val favoriteTracks: Flow<List<Track>> = trackDao.observeFavoriteTracks()
-        .map { rows -> rows.map(TrackEntity::toDomain) }
+        .map { list -> list.map { it.toDomain() } }
 
     val recentTracks: Flow<List<Track>> = historyDao.observeRecentTracks()
-        .map { rows -> rows.map(TrackEntity::toDomain) }
+        .map { list -> list.map { it.toDomain() } }
 
     val playlistSummaries: Flow<List<PlaylistSummary>> = playlistDao.observePlaylistSummaries()
 
     val searchHistory: Flow<List<String>> = historyDao.observeSearchHistory()
-        .map { rows -> rows.map { it.query } }
+        .map { list -> list.map { it.query } }
 
     val cachedTrackCount: Flow<Int> = trackDao.observeCachedCount()
 
-    fun observePlaylist(playlistId: Long): Flow<PlaylistEntity?> =
-        playlistDao.observePlaylist(playlistId)
+    fun observePlaylist(playlistId: Long): Flow<PlaylistEntity?> = playlistDao.observePlaylist(playlistId)
 
     fun observePlaylistTracks(playlistId: Long): Flow<List<Track>> =
-        playlistDao.observePlaylistTracks(playlistId).map { rows -> rows.map(TrackEntity::toDomain) }
+        playlistDao.observePlaylistTracks(playlistId).map { list -> list.map { it.toDomain() } }
 
     suspend fun searchLocalCache(query: String): List<Track> = withContext(Dispatchers.IO) {
-        val cleaned = query.trim()
-        val rows = if (cleaned.isEmpty()) {
-            trackDao.observeCachedTracks().first()
+        val trimmed = query.trim()
+        if (trimmed.isEmpty()) {
+            trackDao.observeCachedTracks().first().map { it.toDomain() }
         } else {
-            trackDao.searchCachedTracks(cleaned).first()
+            trackDao.searchCachedTracks(trimmed).first().map { it.toDomain() }
         }
-        rows.map(TrackEntity::toDomain)
     }
 
-    suspend fun discoverByLanguage(language: String): Result<List<Track>> =
+    suspend fun discoverByLanguage(language: String): Result<List<Track>> = withContext(Dispatchers.IO) {
+        val query = when (language) {
+            "Hindi" -> "popular Hindi songs"
+            "Bengali" -> "popular Bengali songs"
+            "English" -> "popular English hits"
+            "Tamil" -> "popular Tamil songs"
+            "Punjabi" -> "popular Punjabi songs"
+            else -> "popular Hindi and indie songs"
+        }
+        searchOnlineAndCache(query, languageHint = if (language == "All") "" else language)
+    }
+
+    suspend fun searchOnlineAndCache(query: String, languageHint: String = ""): Result<List<Track>> =
         withContext(Dispatchers.IO) {
-            val query = when (language) {
-                "Hindi" -> "popular Hindi songs"
-                "Bengali" -> "popular Bengali songs"
-                "English" -> "popular English hits"
-                "Tamil" -> "popular Tamil songs"
-                "Punjabi" -> "popular Punjabi songs"
-                else -> "popular Hindi and indie songs"
+            val prefs = prefsRepo.preferencesFlow.first()
+            if (prefs.offlineCacheMode) {
+                return@withContext Result.success(searchLocalCache(query))
             }
-            searchOnlineAndCache(query, languageHint = language.takeUnless { it == "All" }.orEmpty())
-        }
-
-    suspend fun searchOnlineAndCache(
-        query: String,
-        languageHint: String = ""
-    ): Result<List<Track>> = withContext(Dispatchers.IO) {
-        val cleaned = query.trim()
-        if (cleaned.length < 2) return@withContext Result.success(emptyList())
-
-        val prefs = prefsRepo.preferencesFlow.first()
-        if (prefs.offlineCacheMode) {
-            return@withContext Result.success(searchLocalCache(cleaned))
-        }
-
-        runCatching {
-            val remote = YtMusicCatalog.search(cleaned, languageHint)
-            if (remote.isEmpty()) {
-                return@runCatching searchLocalCache(cleaned)
-            }
-
-            cacheTracksPreservingFavorites(remote)
-            AudioStreamResolver.prefetchAudioUrls(
-                remote.take(2).map { it.id },
-                prefs.audioQuality
-            )
-
-            val saved = trackDao.getTracksByIds(remote.map { it.id }).associateBy { it.id }
-            remote.map { track ->
-                val local = saved[track.id]
-                if (local == null) track else track.copy(
-                    isFavorite = local.isFavorite,
-                    languageHint = track.languageHint.ifBlank { local.languageHint }
-                )
+            runCatching {
+                val found = YtMusicCatalog.search(query, languageHint)
+                cacheTracksPreservingFavorites(found)
+                if (found.isNotEmpty()) {
+                    AudioStreamResolver.prefetchAudioUrls(found.take(2).map { it.id }, prefs.audioQuality)
+                }
+                val existingMap = trackDao.getTracksByIds(found.map { it.id }).associateBy { it.id }
+                found.map { track ->
+                    existingMap[track.id]?.toDomain() ?: track
+                }
             }
         }
-    }
 
-    suspend fun getLyrics(
-        track: Track,
-        forceRefresh: Boolean = false
-    ): Result<TrackLyrics?> = withContext(Dispatchers.IO) {
-        val cached = lyricsDao.getLyrics(track.id)
-        val cachedResult = cached?.let(::toCachedLyrics)
-        val cacheFresh = cached != null &&
-            System.currentTimeMillis() - cached.fetchedAt < LYRICS_CACHE_TTL_MS
-
-        if (!forceRefresh && cacheFresh) {
-            return@withContext Result.success(cachedResult)
-        }
-
-        val prefs = prefsRepo.preferencesFlow.first()
-        if (prefs.offlineCacheMode) {
-            return@withContext Result.success(cachedResult)
-        }
-
-        runCatching {
-            val fetched = LrcLibClient.fetchLyrics(track)
-            if (fetched != null) {
-                lyricsDao.upsertLyrics(
-                    LyricsCacheEntity(
-                        videoId = track.id,
-                        trackName = track.safeTitle,
-                        artistName = track.safeArtist,
-                        syncedLyrics = fetched.rawSyncedLrc,
-                        plainLyrics = fetched.plainLyrics,
-                        instrumental = fetched.instrumental,
-                        fetchedAt = System.currentTimeMillis()
+    suspend fun getLyrics(track: Track, forceRefresh: Boolean = false): Result<TrackLyrics?> =
+        withContext(Dispatchers.IO) {
+            if (!forceRefresh) {
+                lyricsDao.getLyrics(track.id)?.let { cached ->
+                    return@withContext Result.success(
+                        TrackLyrics(
+                            videoId = cached.videoId,
+                            syncedLines = LrcParser.parse(cached.syncedLyrics),
+                            plainLyrics = cached.plainLyrics,
+                            rawSyncedLrc = cached.syncedLyrics,
+                            instrumental = cached.instrumental,
+                            fromCache = true
+                        )
                     )
-                )
+                }
             }
-            fetched
-        }.recoverCatching { error ->
-            // A stale local lyric is better than a blank player when LRCLIB is offline.
-            if (cachedResult != null) cachedResult else throw error
+            val prefs = prefsRepo.preferencesFlow.first()
+            if (prefs.offlineCacheMode) {
+                return@withContext Result.success(null)
+            }
+            runCatching {
+                val fetched = LrcLibClient.fetchLyrics(track)
+                if (fetched != null) {
+                    lyricsDao.upsertLyrics(
+                        LyricsCacheEntity(
+                            videoId = track.id,
+                            trackName = track.safeTitle,
+                            artistName = track.safeArtist,
+                            syncedLyrics = fetched.rawSyncedLrc,
+                            plainLyrics = fetched.plainLyrics,
+                            instrumental = fetched.instrumental
+                        )
+                    )
+                }
+                fetched
+            }
         }
-    }
-
-    private fun toCachedLyrics(row: LyricsCacheEntity): TrackLyrics = TrackLyrics(
-        videoId = row.videoId,
-        syncedLines = LrcParser.parse(row.syncedLyrics),
-        plainLyrics = row.plainLyrics,
-        rawSyncedLrc = row.syncedLyrics,
-        instrumental = row.instrumental,
-        fromCache = true
-    )
 
     suspend fun cacheTrack(track: Track) = withContext(Dispatchers.IO) {
         cacheTracksPreservingFavorites(listOf(track))
@@ -185,15 +199,14 @@ class MusicRepository(
 
     private suspend fun cacheTracksPreservingFavorites(tracks: List<Track>) {
         if (tracks.isEmpty()) return
-        val ids = tracks.map { it.id }.distinct()
-        val existing = trackDao.getTracksByIds(ids).associateBy { it.id }
-        val entities = tracks.distinctBy { it.id }.map { track ->
-            val old = existing[track.id]
+        val existing = trackDao.getTracksByIds(tracks.map { it.id }).associateBy { it.id }
+        val entities = tracks.map { t ->
+            val old = existing[t.id]
             TrackEntity.fromDomain(
-                track = track.copy(
-                    languageHint = track.languageHint.ifBlank { old?.languageHint.orEmpty() }
+                track = t.copy(
+                    languageHint = t.languageHint.ifBlank { old?.languageHint.orEmpty() }
                 ),
-                existingFavorite = old?.isFavorite ?: track.isFavorite,
+                existingFavorite = old?.isFavorite ?: t.isFavorite,
                 favoritedAt = old?.favoritedAt ?: 0L
             )
         }
@@ -202,36 +215,30 @@ class MusicRepository(
 
     suspend fun toggleFavorite(track: Track): Boolean = withContext(Dispatchers.IO) {
         val existing = trackDao.getTrackById(track.id)
-        val nextFavorite = !(existing?.isFavorite ?: track.isFavorite)
-        val timestamp = if (nextFavorite) System.currentTimeMillis() else 0L
+        val nextFav = !(existing?.isFavorite ?: track.isFavorite)
+        val now = if (nextFav) System.currentTimeMillis() else 0L
         if (existing == null) {
-            trackDao.upsertTrack(
-                TrackEntity.fromDomain(track, existingFavorite = true, favoritedAt = timestamp)
-            )
+            trackDao.upsertTrack(TrackEntity.fromDomain(track, existingFavorite = nextFav, favoritedAt = now))
         } else {
-            trackDao.setFavorite(track.id, nextFavorite, timestamp)
+            trackDao.setFavorite(track.id, nextFav, now)
         }
-        nextFavorite
+        nextFav
     }
 
     suspend fun recordRecentPlay(track: Track) = withContext(Dispatchers.IO) {
         cacheTracksPreservingFavorites(listOf(track))
-        historyDao.upsertRecentPlay(
-            RecentPlayEntity(trackId = track.id, playedAt = System.currentTimeMillis())
-        )
+        historyDao.upsertRecentPlay(RecentPlayEntity(trackId = track.id, playedAt = System.currentTimeMillis()))
     }
 
     suspend fun addSearchHistory(query: String) = withContext(Dispatchers.IO) {
-        val cleaned = query.trim().replace(Regex("\\s+"), " ")
+        val cleaned = query.trim()
         if (cleaned.isNotEmpty()) {
-            historyDao.upsertSearchQuery(
-                SearchHistoryEntity(query = cleaned, searchedAt = System.currentTimeMillis())
-            )
+            historyDao.upsertSearchQuery(SearchHistoryEntity(query = cleaned, searchedAt = System.currentTimeMillis()))
         }
     }
 
     suspend fun deleteSearchQuery(query: String) = withContext(Dispatchers.IO) {
-        historyDao.deleteSearchQuery(query.trim())
+        historyDao.deleteSearchQuery(query)
     }
 
     suspend fun clearSearchHistory() = withContext(Dispatchers.IO) {
@@ -244,27 +251,27 @@ class MusicRepository(
 
     suspend fun clearCachedMetadata() = withContext(Dispatchers.IO) {
         trackDao.clearUncachedOrphans()
+        streamCacheDao.clearAll()
         lyricsDao.clearAll()
-        YtMusicCatalog.clearCache()
         AudioStreamResolver.clearStreamCache()
     }
 
-    suspend fun createPlaylist(name: String, initialTrack: Track? = null): Long =
-        withContext(Dispatchers.IO) {
-            val cleaned = name.trim()
-            require(cleaned.isNotEmpty()) { "Playlist name cannot be empty" }
-            val playlistId = playlistDao.insertPlaylist(PlaylistEntity(name = cleaned))
-            if (initialTrack != null) {
-                cacheTracksPreservingFavorites(listOf(initialTrack))
-                playlistDao.addTrackToPlaylist(playlistId, initialTrack.id)
-            }
-            playlistId
+    suspend fun createPlaylist(name: String, initialTrack: Track? = null): Long = withContext(Dispatchers.IO) {
+        val cleaned = name.trim()
+        require(cleaned.isNotEmpty()) { "Playlist name cannot be empty" }
+        val playlistId = playlistDao.insertPlaylist(PlaylistEntity(name = cleaned))
+        if (initialTrack != null) {
+            cacheTracksPreservingFavorites(listOf(initialTrack))
+            playlistDao.addTrackToPlaylist(playlistId, initialTrack.id)
         }
+        playlistId
+    }
 
     suspend fun renamePlaylist(playlistId: Long, newName: String) = withContext(Dispatchers.IO) {
         val cleaned = newName.trim()
-        require(cleaned.isNotEmpty()) { "Playlist name cannot be empty" }
-        playlistDao.renamePlaylist(playlistId, cleaned)
+        if (cleaned.isNotEmpty()) {
+            playlistDao.renamePlaylist(playlistId, cleaned)
+        }
     }
 
     suspend fun deletePlaylist(playlistId: Long) = withContext(Dispatchers.IO) {
@@ -276,20 +283,14 @@ class MusicRepository(
         playlistDao.addTrackToPlaylist(playlistId, track.id)
     }
 
-    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) =
-        withContext(Dispatchers.IO) {
-            playlistDao.removeTrackFromPlaylist(playlistId, trackId)
-        }
+    suspend fun removeTrackFromPlaylist(playlistId: Long, trackId: String) = withContext(Dispatchers.IO) {
+        playlistDao.removeTrackFromPlaylist(playlistId, trackId)
+    }
 
     suspend fun setThemeMode(mode: ThemeMode) = prefsRepo.setThemeMode(mode)
     suspend fun setOfflineCacheMode(enabled: Boolean) = prefsRepo.setOfflineCacheMode(enabled)
     suspend fun setAudioQuality(quality: AudioQuality) = prefsRepo.setAudioQuality(quality)
     suspend fun setPlaybackSpeed(speed: Float) = prefsRepo.setPlaybackSpeed(speed)
-
-    suspend fun setEqualizer(
-        enabled: Boolean,
-        preset: EqualizerPreset,
-        bands: List<Int>,
-        bassBoost: Int
-    ) = prefsRepo.setEqualizer(enabled, preset, bands, bassBoost)
+    suspend fun setEqualizer(enabled: Boolean, preset: EqualizerPreset, bands: List<Int>, bassBoost: Int) =
+        prefsRepo.setEqualizer(enabled, preset, bands, bassBoost)
 }

@@ -3,286 +3,264 @@ package com.crazestudio.fluxmusic.data.remote
 import com.crazestudio.fluxmusic.data.model.Track
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.InputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 /**
- * YouTube Music catalogue adapter.
- *
- * Search metadata is deliberately kept separate from audio extraction: catalogue
- * results are short-lived, contain no playback URLs, and can be safely cached by query.
+ * Catalogue-only responsibilities: search, parse and normalize YouTube Music metadata.
+ * Stream extraction and playback networking live in AudioStreamResolver.
  */
 object YtMusicCatalog {
-    const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 12; TECNO KI5k) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+    
+        // NewPipeExtractor v0.27.1 resolves YouTube streams with the VISIONOS player client.
+        // Keep this identity when probing and playing those signed stream URLs.
 
-    private const val HOME_URL = "https://music.youtube.com/"
-    private const val SEARCH_ENDPOINT = "https://music.youtube.com/youtubei/v1/search"
-    private const val FALLBACK_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11Gjw"
-    private const val FALLBACK_CLIENT_VERSION = "1.20261116.01.00"
-    private const val CACHE_TTL_MS = 5 * 60 * 1000L
-    private const val MAX_CACHE_ENTRIES = 64
+        private const val SEARCH_ENDPOINT =
+            "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
 
-    private data class Bootstrap(
-        val apiKey: String,
-        val clientVersion: String,
-        val visitorData: String,
-        val fetchedAt: Long
-    )
+        private const val CLIENT_VERSION = "1.20261116.01.00"
 
-    private data class CacheEntry(val storedAt: Long, val tracks: List<Track>)
+        private const val SEARCH_CACHE_TTL_MS = 10 * 60 * 1000L
 
-    private val cache = LinkedHashMap<String, CacheEntry>(32, 0.75f, true)
-    @Volatile private var bootstrap: Bootstrap? = null
-
-    fun search(query: String, languageHint: String = ""): List<Track> {
-        val cleaned = query.trim().replace(Regex("\\s+"), " ")
-        if (cleaned.length < 2) return emptyList()
-        val key = cleaned.lowercase(Locale.ROOT) + "|" + languageHint.lowercase(Locale.ROOT)
-        synchronized(cache) {
-            val entry = cache[key]
-            if (entry != null && System.currentTimeMillis() - entry.storedAt < CACHE_TTL_MS) {
-                return entry.tracks.toList()
-            }
-            cache.remove(key)
-        }
-
-        val session = getBootstrap()
-        val client = JSONObject()
-            .put("clientName", "WEB_REMIX")
-            .put("clientVersion", session.clientVersion)
-            .put("hl", "en")
-            .put("gl", "IN")
-            .put("utcOffsetMinutes", 330)
-        if (session.visitorData.isNotBlank()) client.put("visitorData", session.visitorData)
-        val request = JSONObject()
-            .put("context", JSONObject().put("client", client))
-            .put("query", cleaned)
-
-        val headers = linkedMapOf(
-            "User-Agent" to USER_AGENT,
-            "Origin" to "https://music.youtube.com",
-            "Referer" to HOME_URL,
-            "X-YouTube-Client-Name" to "67",
-            "X-YouTube-Client-Version" to session.clientVersion
+        private data class SearchCacheEntry(
+            val time: Long = System.currentTimeMillis(),
+            val tracks: List<Track>
         )
-        if (session.visitorData.isNotBlank()) headers["X-Goog-Visitor-Id"] = session.visitorData
 
-        val endpoint = SEARCH_ENDPOINT + "?key=" + session.apiKey + "&prettyPrint=false"
-        val response = HttpTransport.postJson(
-            endpoint,
-            request.toString(),
-            headers = headers,
-            connectTimeoutMs = 6_000,
-            readTimeoutMs = 9_000,
-            maxBytes = 4 * 1024 * 1024
-        ).requireSuccess("YouTube Music search")
+        private val searchCache = LinkedHashMap<String, SearchCacheEntry>(32, 0.75f, true)
 
-        val found = LinkedHashMap<String, Track>()
-        collect(JSONObject(response.body), found, languageHint)
-        val tracks = found.values.take(80).toList()
-        if (tracks.isNotEmpty()) {
-            synchronized(cache) {
-                cache[key] = CacheEntry(System.currentTimeMillis(), tracks)
-                while (cache.size > MAX_CACHE_ENTRIES) {
-                    cache.remove(cache.keys.firstOrNull() ?: break)
+        fun search(query: String, languageHint: String = ""): List<Track> {
+            val normalized = query.trim().replace(Regex("\\s+"), " ").lowercase(Locale.ROOT)
+            if (normalized.isEmpty()) return emptyList()
+    
+            synchronized(searchCache) {
+                val cached = searchCache[normalized]
+                if (cached != null && System.currentTimeMillis() - cached.time < SEARCH_CACHE_TTL_MS) {
+                    return cached.tracks.toList()
                 }
+                searchCache.remove(normalized)
             }
-        }
-        return tracks
-    }
-
-    fun clearCache() {
-        synchronized(cache) { cache.clear() }
-    }
-
-    private fun getBootstrap(): Bootstrap {
-        val now = System.currentTimeMillis()
-        bootstrap?.let { if (now - it.fetchedAt < 6 * 60 * 60 * 1000L) return it }
-
-        val discovered = runCatching {
-            val response = HttpTransport.get(
-                HOME_URL,
-                headers = mapOf(
-                    "User-Agent" to USER_AGENT,
-                    "Accept" to "text/html,application/xhtml+xml",
-                    "Accept-Language" to "en-IN,en;q=0.9"
-                ),
-                connectTimeoutMs = 4_000,
-                readTimeoutMs = 6_000,
-                maxBytes = 3 * 1024 * 1024
-            ).requireSuccess("YouTube Music bootstrap")
-            val html = response.body
-            val apiKey = extract(html, Regex("""["']?INNERTUBE_API_KEY["']?\s*:\s*["']([^"']+)["']"""))
-                ?: FALLBACK_API_KEY
-            val version = extract(html, Regex(""""clientVersion"\s*:\s*"([^"]+)""""))
-                ?: FALLBACK_CLIENT_VERSION
-            val visitor = extract(html, Regex(""""visitorData"\s*:\s*"([^"]+)"""")).orEmpty()
-            Bootstrap(apiKey, version, visitor, now)
-        }.getOrElse {
-            Bootstrap(FALLBACK_API_KEY, FALLBACK_CLIENT_VERSION, "", now)
-        }
-
-        bootstrap = discovered
-        return discovered
-    }
-
-    private fun collect(node: Any?, out: MutableMap<String, Track>, languageHint: String) {
-        when (node) {
-            is JSONObject -> {
-                node.optJSONObject("musicResponsiveListItemRenderer")?.let { renderer ->
-                    parseMusicTrack(renderer, languageHint)?.let { out.putIfAbsent(it.id, it) }
+    
+            val client = JSONObject()
+                .put("clientName", "WEB_REMIX")
+                .put("clientVersion", CLIENT_VERSION)
+                .put("hl", "en")
+                .put("gl", "IN")
+            val body = JSONObject()
+                .put("context", JSONObject().put("client", client))
+                .put("query", query)
+    
+            val conn = (URL(SEARCH_ENDPOINT).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 5000
+                readTimeout = 7000
+                setRequestProperty("User-Agent", USER_AGENT)
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Origin", "https://music.youtube.com")
+                setRequestProperty("Referer", "https://music.youtube.com/")
+                setRequestProperty("Accept", "application/json")
+                doOutput = true
+            }
+    
+            return try {
+                conn.outputStream.use { out ->
+                    out.write(body.toString().toByteArray(StandardCharsets.UTF_8))
                 }
-                node.optJSONObject("videoRenderer")?.let { renderer ->
-                    parseVideoTrack(renderer, languageHint)?.let { out.putIfAbsent(it.id, it) }
+                val status = conn.responseCode
+                val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+                val json = readStream(stream)
+                if (status !in 200..299) {
+                    throw IOException("YouTube Music search HTTP $status")
                 }
-                val keys = node.keys()
-                while (keys.hasNext()) collect(node.opt(keys.next()), out, languageHint)
-            }
-            is JSONArray -> {
-                for (index in 0 until node.length()) collect(node.opt(index), out, languageHint)
-            }
-        }
-    }
-
-    private fun parseMusicTrack(renderer: JSONObject, languageHint: String): Track? {
-        val id = deepString(renderer, "videoId")
-            .takeIf { it.matches(Regex("[A-Za-z0-9_-]{6,20}")) } ?: return null
-        val columns = renderer.optJSONArray("flexColumns")
-        val title = columns?.optJSONObject(0)?.let(::extractText).orEmpty()
-        val rawArtist = columns?.optJSONObject(1)?.let(::extractText).orEmpty()
-        val rawAlbum = columns?.optJSONObject(2)?.let(::extractText).orEmpty()
-        val fixed = renderer.optJSONArray("fixedColumns")
-        val rawDuration = fixed?.optJSONObject(0)?.let(::extractText).orEmpty()
-
-        val artistParts = rawArtist.split("•").map(String::trim).filter(String::isNotEmpty)
-        val artist = artistParts.firstOrNull {
-            !it.equals("Song", true) && !it.equals("Video", true) &&
-                !it.equals("Single", true) && !it.equals("Album", true)
-        } ?: "Unknown artist"
-        val album = rawAlbum.ifBlank {
-            artistParts.lastOrNull()?.takeIf { it != artist && !it.contains(":") } ?: "YouTube Music"
-        }
-
-        return Track(
-            id = id,
-            title = title.ifBlank { "Unknown title" },
-            artist = artist,
-            album = album,
-            durationMs = parseDuration(rawDuration),
-            thumbnailUrl = upgradeThumbnailUrl(extractThumbnail(renderer)),
-            languageHint = languageHint
-        )
-    }
-
-    private fun parseVideoTrack(renderer: JSONObject, languageHint: String): Track? {
-        val id = renderer.optString("videoId", "")
-            .takeIf { it.matches(Regex("[A-Za-z0-9_-]{6,20}")) } ?: return null
-        val title = extractText(renderer.opt("title"))
-        val owner = extractText(renderer.opt("ownerText"))
-        val duration = extractText(renderer.opt("lengthText"))
-        return Track(
-            id = id,
-            title = title.ifBlank { "Unknown title" },
-            artist = owner.ifBlank { "Unknown artist" },
-            album = "YouTube",
-            durationMs = parseDuration(duration),
-            thumbnailUrl = upgradeThumbnailUrl(extractThumbnail(renderer)),
-            languageHint = languageHint
-        )
-    }
-
-    private fun extract(text: String, regex: Regex): String? =
-        regex.find(text)?.groupValues?.getOrNull(1)
-
-    private fun deepString(node: Any?, key: String): String {
-        when (node) {
-            is JSONObject -> {
-                val value = node.opt(key)
-                if (value is String && value.isNotBlank()) return value
-                val keys = node.keys()
-                while (keys.hasNext()) {
-                    val found = deepString(node.opt(keys.next()), key)
-                    if (found.isNotEmpty()) return found
-                }
-            }
-            is JSONArray -> for (index in 0 until node.length()) {
-                val found = deepString(node.opt(index), key)
-                if (found.isNotEmpty()) return found
-            }
-        }
-        return ""
-    }
-
-    private fun extractText(node: Any?): String {
-        when (node) {
-            is JSONObject -> {
-                val direct = node.opt("text")
-                if (direct is String && direct.isNotBlank()) return direct
-                val simple = node.optJSONObject("simpleText")?.optString("text", "")
-                if (!simple.isNullOrBlank()) return simple
-                val runs = node.optJSONArray("runs")
-                if (runs != null) {
-                    val result = buildString {
-                        for (index in 0 until runs.length()) {
-                            append(runs.optJSONObject(index)?.optString("text", "").orEmpty())
+                val parsed = LinkedHashMap<String, Track>()
+                collect(JSONObject(json), parsed, languageHint)
+                val result = parsed.values.toList()
+                // Empty results can be transient when the upstream response changes.
+                // Avoid caching them so a subsequent request can recover immediately.
+                if (result.isNotEmpty()) {
+                    synchronized(searchCache) {
+                        searchCache[normalized] = SearchCacheEntry(tracks = result)
+                        while (searchCache.size > 80) {
+                            val oldestKey = searchCache.keys.firstOrNull() ?: break
+                            searchCache.remove(oldestKey)
                         }
                     }
-                    if (result.isNotBlank()) return result
                 }
-                val keys = node.keys()
-                while (keys.hasNext()) {
-                    val found = extractText(node.opt(keys.next()))
-                    if (found.isNotEmpty()) return found
-                }
-            }
-            is JSONArray -> for (index in 0 until node.length()) {
-                val found = extractText(node.opt(index))
-                if (found.isNotEmpty()) return found
+                result
+            } finally {
+                conn.disconnect()
             }
         }
-        return ""
-    }
+    
+        @Synchronized
 
-    private fun extractThumbnail(node: Any?): String {
-        when (node) {
-            is JSONObject -> {
-                val thumbnails = node.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-                if (thumbnails != null && thumbnails.length() > 0) {
-                    for (index in thumbnails.length() - 1 downTo 0) {
-                        val url = thumbnails.optJSONObject(index)?.optString("url", "").orEmpty()
-                        if (url.startsWith("https://")) return url
+        private fun collect(node: Any?, out: MutableMap<String, Track>, languageHint: String) {
+            when (node) {
+                is JSONObject -> {
+                    val renderer = node.optJSONObject("musicResponsiveListItemRenderer")
+                    if (renderer != null) {
+                        parseTrack(renderer, languageHint)?.let { track ->
+                            out[track.id] = track
+                        }
+                    }
+                    val keys = node.keys()
+                    while (keys.hasNext()) {
+                        collect(node.opt(keys.next()), out, languageHint)
                     }
                 }
-                val keys = node.keys()
-                while (keys.hasNext()) {
-                    val found = extractThumbnail(node.opt(keys.next()))
-                    if (found.isNotEmpty()) return found
+                is JSONArray -> {
+                    for (i in 0 until node.length()) {
+                        collect(node.opt(i), out, languageHint)
+                    }
                 }
             }
-            is JSONArray -> for (index in node.length() - 1 downTo 0) {
-                val found = extractThumbnail(node.opt(index))
-                if (found.isNotEmpty()) return found
+        }
+
+        private fun parseTrack(r: JSONObject, languageHint: String): Track? {
+            val id = deepString(r, "videoId")
+            if (id.isBlank()) return null
+            val flex = r.optJSONArray("flexColumns")
+            val title = if (flex != null && flex.length() > 0) extractText(flex.optJSONObject(0)) else ""
+            val rawArtist = if (flex != null && flex.length() > 1) extractText(flex.optJSONObject(1)) else ""
+            val rawAlbum = if (flex != null && flex.length() > 2) extractText(flex.optJSONObject(2)) else ""
+            val fixed = r.optJSONArray("fixedColumns")
+            val rawDuration = if (fixed != null && fixed.length() > 0) extractText(fixed.optJSONObject(0)) else ""
+            val thumb = upgradeThumbnailUrl(extractThumbnail(r))
+    
+            val artistParts = rawArtist.split("•").map { it.trim() }.filter { it.isNotEmpty() }
+            val cleanArtist = artistParts.firstOrNull()?.takeIf {
+                !it.equals("Song", ignoreCase = true) && !it.equals("Video", ignoreCase = true)
+            } ?: artistParts.getOrNull(1) ?: rawArtist
+            val cleanAlbum = rawAlbum.ifBlank {
+                artistParts.lastOrNull()?.takeIf { it != cleanArtist && !it.contains(":") } ?: "YouTube Music"
+            }
+    
+            return Track(
+                id = id,
+                title = title,
+                artist = cleanArtist,
+                album = cleanAlbum,
+                durationMs = durationMillis(rawDuration),
+                thumbnailUrl = thumb,
+                languageHint = languageHint
+            )
+        }
+
+        private fun upgradeThumbnailUrl(url: String): String {
+            if (url.isBlank()) return ""
+            return url
+                .replace(Regex("=w\\d+-h\\d+[^&\\s]*"), "=w544-h544-l90-rj")
+                .replace(Regex("=s\\d+[^&\\s]*"), "=s544")
+        }
+
+        private fun deepString(node: Any?, key: String): String {
+            when (node) {
+                is JSONObject -> {
+                    val direct = node.opt(key)
+                    if (direct is String && direct.isNotBlank()) return direct
+                    val keys = node.keys()
+                    while (keys.hasNext()) {
+                        val found = deepString(node.opt(keys.next()), key)
+                        if (found.isNotEmpty()) return found
+                    }
+                }
+                is JSONArray -> {
+                    for (i in 0 until node.length()) {
+                        val found = deepString(node.opt(i), key)
+                        if (found.isNotEmpty()) return found
+                    }
+                }
+            }
+            return ""
+        }
+
+        private fun extractText(node: Any?): String {
+            when (node) {
+                is JSONObject -> {
+                    val direct = node.opt("text")
+                    if (direct is String && direct.isNotBlank()) return direct
+                    val runs = node.optJSONArray("runs")
+                    if (runs != null) {
+                        val sb = StringBuilder()
+                        for (i in 0 until runs.length()) {
+                            runs.optJSONObject(i)?.optString("text", "")?.let { sb.append(it) }
+                        }
+                        if (sb.isNotEmpty()) return sb.toString()
+                    }
+                    val keys = node.keys()
+                    while (keys.hasNext()) {
+                        val v = extractText(node.opt(keys.next()))
+                        if (v.isNotEmpty()) return v
+                    }
+                }
+                is JSONArray -> {
+                    for (i in 0 until node.length()) {
+                        val v = extractText(node.opt(i))
+                        if (v.isNotEmpty()) return v
+                    }
+                }
+            }
+            return ""
+        }
+
+        private fun extractThumbnail(node: Any?): String {
+            when (node) {
+                is JSONObject -> {
+                    val thumbObj = node.optJSONObject("thumbnail")
+                    if (thumbObj != null) {
+                        val arr = thumbObj.optJSONArray("thumbnails")
+                        if (arr != null && arr.length() > 0) {
+                            val last = arr.optJSONObject(arr.length() - 1)
+                            val url = last?.optString("url", "").orEmpty()
+                            if (url.isNotEmpty()) return url
+                        }
+                    }
+                    val keys = node.keys()
+                    while (keys.hasNext()) {
+                        val v = extractThumbnail(node.opt(keys.next()))
+                        if (v.isNotEmpty()) return v
+                    }
+                }
+                is JSONArray -> {
+                    for (i in 0 until node.length()) {
+                        val v = extractThumbnail(node.opt(i))
+                        if (v.isNotEmpty()) return v
+                    }
+                }
+            }
+            return ""
+        }
+
+        private fun durationMillis(value: String): Long {
+            return try {
+                var seconds = 0L
+                for (part in value.trim().split(":")) {
+                    seconds = seconds * 60L + part.toLong()
+                }
+                seconds * 1000L
+            } catch (_: Exception) {
+                0L
             }
         }
-        return ""
-    }
 
-    private fun upgradeThumbnailUrl(url: String): String {
-        if (url.isBlank()) return ""
-        return url
-            .replace(Regex("=w\\d+-h\\d+[^&\\s]*"), "=w544-h544-l90-rj")
-            .replace(Regex("=s\\d+[^&\\s]*"), "=s544")
-    }
-
-    private fun parseDuration(value: String): Long {
-        val parts = value.trim().split(":")
-        if (value.isBlank() || parts.isEmpty() || parts.size > 3) return 0L
-        var seconds = 0L
-        parts.forEachIndexed { index, part ->
-            val component = part.toLongOrNull() ?: return 0L
-            if (component < 0L || (index > 0 && component >= 60L)) return 0L
-            seconds = seconds * 60L + component
+        private fun readStream(input: InputStream?): String {
+            if (input == null) return ""
+            return input.use { src ->
+                ByteArrayOutputStream().use { out ->
+                    val buf = ByteArray(8192)
+                    var read: Int
+                    while (src.read(buf).also { read = it } != -1) {
+                        out.write(buf, 0, read)
+                    }
+                    out.toString("UTF-8")
+                }
+            }
         }
-        return seconds * 1000L
-    }
 }

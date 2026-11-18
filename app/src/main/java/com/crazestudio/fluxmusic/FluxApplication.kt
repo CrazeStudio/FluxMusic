@@ -13,6 +13,7 @@ class FluxApplication : Application() {
             trackDao = database.trackDao(),
             playlistDao = database.playlistDao(),
             historyDao = database.historyDao(),
+            streamCacheDao = database.streamCacheDao(),
             lyricsDao = database.lyricsDao(),
             prefsRepo = preferencesRepository
         )
@@ -20,5 +21,6 @@ class FluxApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // MusicService initializes networking only when online playback is enabled.
     }
 }

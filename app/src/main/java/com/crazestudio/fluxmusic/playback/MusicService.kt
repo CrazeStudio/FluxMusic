@@ -86,6 +86,9 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         val app = application as FluxApplication
+        // Ensure persistent stream cache store is attached even if service starts before MainActivity.
+        app.repository
+
         engine = PlaybackEngine(this)
         player = engine.createPlayer()
 
@@ -192,18 +195,6 @@ class MusicService : MediaSessionService() {
 
         stallWatchdogJob = serviceScope.launch {
             delay(15_000L)
-
-            // Stream resolution can legitimately take longer than the watchdog window.
-            // Do not seek/prepare again while the resolver is still fetching a playable URL:
-            // doing so can cancel the first load and create a retry loop.
-            while (AudioStreamResolver.isResolving(currentId, currentQuality) &&
-                player.playWhenReady &&
-                player.playbackState == Player.STATE_BUFFERING &&
-                player.currentMediaItem?.mediaId == currentId
-            ) {
-                delay(5_000L)
-            }
-
             val currentAttempts = if (autoRetryVideoId == currentId) autoRetryAttempts else 0
             if (player.playWhenReady &&
                 player.playbackState == Player.STATE_BUFFERING &&
