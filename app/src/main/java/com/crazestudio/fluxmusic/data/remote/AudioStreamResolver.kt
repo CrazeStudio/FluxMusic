@@ -256,6 +256,10 @@ object AudioStreamResolver {
         val failures = ArrayList<String>()
 
         for (profile in profiles) {
+            if (profile.name == "VISIONOS" && session.visitorData.isBlank()) {
+                failures.add("VISIONOS(no visitorData)")
+                continue
+            }
             val clientFailureKey = "$videoId|${profile.name}"
             val failedUntil = failedClients[clientFailureKey] ?: 0L
             if (failedUntil > System.currentTimeMillis()) continue
@@ -335,6 +339,18 @@ object AudioStreamResolver {
     }
 
     private fun buildClientProfiles(): List<ClientProfile> {
+        val visionOs = JSONObject()
+            .put("clientName", "VISIONOS")
+            .put("clientVersion", "1.02")
+            .put("deviceMake", "Apple")
+            .put("deviceModel", "RealityDevice17,1")
+            .put("userAgent", VISIONOS_USER_AGENT)
+            .put("osName", "visionOS")
+            .put("osVersion", "26.5.23O471")
+            .put("hl", "en")
+            .put("gl", "US")
+            .put("timeZone", "UTC")
+            .put("utcOffsetMinutes", 0)
         val androidVr = JSONObject()
             .put("clientName", "ANDROID_VR")
             .put("clientVersion", "1.60.19")
@@ -372,6 +388,10 @@ object AudioStreamResolver {
             .put("gl", "IN")
 
         return listOf(
+            ClientProfile(
+                "VISIONOS", "1.02", "101", VISIONOS_USER_AGENT, visionOs,
+                mapOf("Origin" to "https://www.youtube.com", "Referer" to "https://www.youtube.com/")
+            ),
             ClientProfile(
                 "ANDROID_VR", "1.60.19", "28", ANDROID_VR_USER_AGENT, androidVr
             ),
