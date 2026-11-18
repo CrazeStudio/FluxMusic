@@ -4,6 +4,7 @@ import android.app.Application
 import com.crazestudio.fluxmusic.data.local.db.FluxDatabase
 import com.crazestudio.fluxmusic.data.local.prefs.UserPreferencesRepository
 import com.crazestudio.fluxmusic.data.repository.MusicRepository
+import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
 
 class FluxApplication : Application() {
     val database: FluxDatabase by lazy { FluxDatabase.getInstance(this) }
@@ -21,6 +22,7 @@ class FluxApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // MusicService initializes networking only when online playback is enabled.
+        // yt-dlp extracts its Python/QuickJS runtime on a worker thread, never on the UI thread.
+        AudioStreamResolver.initialize(this)
     }
 }

@@ -19,8 +19,7 @@ object YtMusicCatalog {
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 12; TECNO KI5k) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
     
-        // NewPipeExtractor v0.27.1 resolves YouTube streams with the VISIONOS player client.
-        // Keep this identity when probing and playing those signed stream URLs.
+        // Catalogue search is metadata-only. yt-dlp owns all playback stream extraction.
 
         private const val SEARCH_ENDPOINT =
             "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"

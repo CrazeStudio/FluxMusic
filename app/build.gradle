@@ -12,10 +12,11 @@ android {
 
     defaultConfig {
         applicationId 'com.crazestudio.fluxmusic'
-        minSdk 23
+        minSdk 24
         targetSdk 36
         versionCode 3
-        versionName '3.0.0'
+        versionName '3.1.0'
+        ndk { abiFilters 'arm64-v8a' }
     }
 
     compileOptions {
@@ -68,7 +69,7 @@ dependencies {
 
     implementation 'androidx.media3:media3-exoplayer:1.11.1'
     implementation 'androidx.media3:media3-session:1.11.1'
-    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.27.1'
+    implementation 'io.github.junkfood02.youtubedl-android:library:0.18.1'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.14.1'

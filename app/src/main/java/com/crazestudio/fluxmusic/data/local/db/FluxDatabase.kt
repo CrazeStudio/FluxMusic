@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         StreamCacheEntity::class,
         LyricsCacheEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class FluxDatabase : RoomDatabase() {
@@ -67,6 +67,13 @@ abstract class FluxDatabase : RoomDatabase() {
             }
         }
 
+        // Signed YouTube stream URLs are transient. Erase URLs cached by older releases.
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DELETE FROM stream_cache")
+            }
+        }
+
         fun getInstance(context: Context): FluxDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -74,7 +81,7 @@ abstract class FluxDatabase : RoomDatabase() {
                     FluxDatabase::class.java,
                     "flux_music.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }
