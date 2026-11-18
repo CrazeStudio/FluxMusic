@@ -84,6 +84,8 @@ object AudioStreamResolver {
          */
 
     private val inFlightResolutions = ConcurrentHashMap<String, CompletableFuture<ResolvedAudioStream>>()
+    private val failedProviders = ConcurrentHashMap<String, ConcurrentHashMap<String, Long>>()
+    private const val PROVIDER_BACKOFF_MS = 2 * 60 * 1000L
     private val streamCache = LinkedHashMap<String, StreamCacheEntry>(96, 0.75f, true)
 
     fun prepareYoutubePlaybackUrl(url: String): String = runCatching {
@@ -191,6 +193,34 @@ object AudioStreamResolver {
         }
     }
 
+    /**
+     * Called after an actual Media3 playback failure. Penalize the provider that
+     * supplied the failed URL so the next resolution moves to another source.
+     */
+    fun markPlaybackFailed(videoId: String) {
+        val failed = synchronized(streamCache) {
+            val entries = streamCache.filterKeys { it.startsWith("$videoId:") }.values.toList()
+            streamCache.keys.filter { it.startsWith("$videoId:") }.toList().forEach(streamCache::remove)
+            entries.map { it.stream.source }.distinct()
+        }
+        val until = System.currentTimeMillis() + PROVIDER_BACKOFF_MS
+        failedProviders.computeIfAbsent(videoId) { ConcurrentHashMap() }.also { map ->
+            failed.forEach { source -> map[source] = until }
+        }
+        runCatching { persistentInvalidator?.invoke(videoId) }
+    }
+
+    private fun providerAvailable(videoId: String, source: String): Boolean {
+        val providers = failedProviders[videoId] ?: return true
+        val until = providers[source] ?: return true
+        if (until <= System.currentTimeMillis()) {
+            providers.remove(source, until)
+            if (providers.isEmpty()) failedProviders.remove(videoId, providers)
+            return true
+        }
+        return false
+    }
+
     private fun cacheExpiry(stream: ResolvedAudioStream, now: Long): Long {
         val upstreamExpiry = runCatching {
             Uri.parse(stream.url).getQueryParameter("expire")?.toLongOrNull()?.times(1000L)
@@ -201,9 +231,15 @@ object AudioStreamResolver {
     }
 
     private fun resolveWithFallbacks(videoId: String, quality: AudioQuality): ResolvedAudioStream {
-        resolveViaNewPipe(videoId, quality)?.let { return it }
-        resolveViaPiped(videoId, quality)?.let { return it }
-        resolveViaInvidious(videoId, quality)?.let { return it }
+        if (providerAvailable(videoId, "newpipe")) {
+            resolveViaNewPipe(videoId, quality)?.let { return it }
+        }
+        if (providerAvailable(videoId, "piped")) {
+            resolveViaPiped(videoId, quality)?.let { return it }
+        }
+        if (providerAvailable(videoId, "invidious")) {
+            resolveViaInvidious(videoId, quality)?.let { return it }
+        }
         throw IOException("No audio stream is currently available from YouTube or fallback providers. Please retry.")
     }
 
