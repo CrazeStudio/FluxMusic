@@ -22,7 +22,7 @@ class FluxApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // yt-dlp extracts its Python/QuickJS runtime on a worker thread, never on the UI thread.
+        // Native Innertube resolver requires no bundled runtime.
         AudioStreamResolver.initialize(this)
     }
 }
