@@ -19,8 +19,8 @@ object YtMusicCatalog {
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 12; TECNO KI5k) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
     
-        // NewPipeExtractor v0.27.1 resolves YouTube streams with the VISIONOS player client.
-        // Keep this identity when probing and playing those signed stream URLs.
+        // Mobile browser identity for YouTube Music catalogue/search requests.
+        // Stream playback chooses its own user-agent from the active InnerTube client profile.
 
         private const val SEARCH_ENDPOINT =
             "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
