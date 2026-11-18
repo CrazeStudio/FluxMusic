@@ -22,7 +22,7 @@ import com.crazestudio.fluxmusic.data.model.Track
 import com.crazestudio.fluxmusic.data.model.TrackLyrics
 import com.crazestudio.fluxmusic.data.remote.LrcLibClient
 import com.crazestudio.fluxmusic.data.remote.ResolvedAudioStream
-import com.crazestudio.fluxmusic.data.remote.YtMusicCatalog
+import com.crazestudio.fluxmusic.data.remote.AudioStreamResolver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -39,17 +39,17 @@ class MusicRepository(
     private val prefsRepo: UserPreferencesRepository
 ) {
     init {
-        YtMusicCatalog.attachPersistentStreamStore(
+        AudioStreamResolver.attachPersistentStreamStore(
             reader = { videoId, quality ->
                 runCatching {
                     runBlocking {
                         streamCacheDao.getValidStream(videoId, quality.name)?.let { entity ->
                             entity.userAgent
-                                .takeIf { it.endsWith(YtMusicCatalog.STREAM_CACHE_TAG) }
+                                .takeIf { it.endsWith(AudioStreamResolver.STREAM_CACHE_TAG) }
                                 ?.let { taggedUserAgent ->
                                     ResolvedAudioStream(
                                         url = entity.streamUrl,
-                                        userAgent = taggedUserAgent.removeSuffix(YtMusicCatalog.STREAM_CACHE_TAG),
+                                        userAgent = taggedUserAgent.removeSuffix(AudioStreamResolver.STREAM_CACHE_TAG),
                                         source = "cache"
                                     )
                                 }
@@ -65,7 +65,7 @@ class MusicRepository(
                                 videoId = videoId,
                                 quality = quality.name,
                                 streamUrl = stream.url,
-                                userAgent = stream.userAgent + YtMusicCatalog.STREAM_CACHE_TAG,
+                                userAgent = stream.userAgent + AudioStreamResolver.STREAM_CACHE_TAG,
                                 expiresAt = expiresAt
                             )
                         )
@@ -247,7 +247,7 @@ class MusicRepository(
         trackDao.clearUncachedOrphans()
         streamCacheDao.clearAll()
         lyricsDao.clearAll()
-        YtMusicCatalog.clearStreamCache()
+        AudioStreamResolver.clearStreamCache()
     }
 
     suspend fun createPlaylist(name: String, initialTrack: Track? = null): Long = withContext(Dispatchers.IO) {
