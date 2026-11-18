@@ -1,6 +1,5 @@
 package com.crazestudio.fluxmusic.data.remote
 
-import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.crazestudio.fluxmusic.data.model.AudioQuality
@@ -81,17 +80,6 @@ object AudioStreamResolver {
 
     @Volatile
     private var extractorReady = false
-
-    @Volatile
-    private var ytDlpReady = false
-
-    @Synchronized
-    fun initializeYtDlp(context: Context) {
-        if (ytDlpReady) return
-        YoutubeDL.getInstance().init(context.applicationContext)
-        ytDlpReady = true
-        Log.i(TAG, "yt-dlp engine initialized")
-    }
 
     @Volatile
     private var persistentReader: ((videoId: String, quality: AudioQuality) -> ResolvedAudioStream?)? = null
