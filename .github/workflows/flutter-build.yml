@@ -15,8 +15,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-      - name: Generate Android platform scaffolding
-        run: flutter create --project-name fluxmusic --platforms android flutter_app
+      - name: Generate Android platform scaffold
+        run: |
+          flutter create --project-name fluxmusic --platforms android /tmp/flux_scaffold
+          cp -R /tmp/flux_scaffold/android flutter_app/
       - name: Install dependencies
         working-directory: flutter_app
         run: flutter pub get
