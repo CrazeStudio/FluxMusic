@@ -15,6 +15,10 @@ jobs:
           channel: stable
       - name: Generate Android Gradle project
         run: flutter create --project-name fluxmusic --org com.crazestudio --platforms android .
+      - name: Patch Android media service manifest
+        run: python scripts/patch_android_manifest.py
+      - name: Remove generated placeholder test
+        run: rm -f test/widget_test.dart
       - name: Dependencies
         run: flutter pub get
       - name: Analyze
