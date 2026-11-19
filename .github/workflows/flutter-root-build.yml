@@ -1,7 +1,7 @@
 name: FluxMusic Flutter
 on:
   push:
-    branches: [rebuild/flutter-root]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
