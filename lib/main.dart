@@ -1,180 +1,76 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:audio_service/audio_service.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() => runApp(const FluxMusicApp());
-
-const bg = Color(0xFF101010);
-const surface = Color(0xFF1B1B1B);
-const accent = Color(0xFFFF7A18);
-
-class FluxMusicApp extends StatelessWidget {
-  const FluxMusicApp({super.key});
-
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    debugShowCheckedModeBanner: false,
-    title: 'FluxMusic',
-    theme: ThemeData(
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: bg,
-      colorScheme: const ColorScheme.dark(primary: accent, surface: surface),
-      fontFamily: 'Roboto',
-      useMaterial3: true,
-    ),
-    home: const MusicHome(),
-  );
+const bg=Color(0xFF101010), surface=Color(0xFF1B1B1B), accent=Color(0xFFFF7A18);
+const ua='Mozilla/5.0 (Linux; Android 12; TECNO KI5k) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+const searchUrl='https://music.youtube.com/youtubei/v1/search?prettyPrint=false';
+const playerUrl='https://music.youtube.com/youtubei/v1/player?prettyPrint=false';
+const clientVersion='1.20261116.01.00';
+void main() async { WidgetsFlutterBinding.ensureInitialized(); final p=await SharedPreferences.getInstance(); final h=await AudioService.init(builder:()=>FluxHandler(),config:const AudioServiceConfig(androidNotificationChannelId:'com.crazestudio.fluxmusic.playback',androidNotificationChannelName:'FluxMusic playback',androidNotificationOngoing:true,androidStopForegroundOnPause:true)); runApp(App(p,h)); }
+String fmt(int ms){if(ms<=0)return '--:--';final s=ms~/1000;return s>=3600?(s~/3600).toString()+':'+((s%3600)~/60).toString().padLeft(2,'0')+':'+(s%60).toString().padLeft(2,'0'):(s~/60).toString()+':'+(s%60).toString().padLeft(2,'0');}
+class Track{final String id,title,artist,album,art;final int duration;const Track({required this.id,required this.title,required this.artist,this.album='YouTube Music',this.art='',this.duration=0});Map toJson()=>{'id':id,'title':title,'artist':artist,'album':album,'art':art,'duration':duration};factory Track.fromJson(Map j)=>Track(id:j['id']??'',title:j['title']??'Unknown title',artist:j['artist']??'Unknown artist',album:j['album']??'YouTube Music',art:j['art']??'',duration:j['duration']??0);String get time=>fmt(duration);}
+enum Quality{balanced,high,saver} enum ThemeChoice{system,dark,light}
+class FluxHandler extends BaseAudioHandler with QueueHandler,SeekHandler{
+ final player=AudioPlayer();final tracks=<Track>[];int index=0;bool shuffle=false;Quality quality=Quality.balanced;LoopMode loop=LoopMode.off;final cache=<String,String>{};final cacheTime=<String,DateTime>{};
+ FluxHandler(){player.playbackEventStream.listen((e)=>playbackState.add(playbackState.value.copyWith(controls:[MediaControl.skipToPrevious,player.playing?MediaControl.pause:MediaControl.play,MediaControl.skipToNext,MediaControl.stop],androidCompactActionIndices:const[0,1,2],processingState:_state(player.processingState),playing:player.playing,updatePosition:player.position,bufferedPosition:player.bufferedPosition,speed:player.speed,queueIndex:index)));player.positionStream.listen((p)=>playbackState.add(playbackState.value.copyWith(updatePosition:p)));player.durationStream.listen((d){if(current!=null)mediaItem.add(item(current!,d?.inMilliseconds));});}
+ Track? get current=>index>=0&&index<tracks.length?tracks[index]:null;
+ AudioProcessingState _state(ProcessingState s)=>switch(s){ProcessingState.idle=>AudioProcessingState.idle,ProcessingState.loading=>AudioProcessingState.loading,ProcessingState.buffering=>AudioProcessingState.buffering,ProcessingState.ready=>AudioProcessingState.ready,ProcessingState.completed=>AudioProcessingState.completed};
+ MediaItem item(Track t,[int? d])=>MediaItem(id:t.id,title:t.title,artist:t.artist,album:t.album,duration:Duration(milliseconds:d??t.duration),artUri:Uri.tryParse(t.art),extras:t.toJson());
+ Future<void> playList(List<Track> l,int start)async{tracks..clear()..addAll(l);queue.add(l.map(item).toList());index=start.clamp(0,l.length-1);await playTrack(index);}
+ Future<void> playTrack(int i)async{if(tracks.isEmpty)return;index=i.clamp(0,tracks.length-1);final t=tracks[index];mediaItem.add(item(t));try{final u=await resolve(t.id);await player.setAudioSource(AudioSource.uri(Uri.parse(u),tag:item(t)));await player.play();}catch(e){playbackState.add(playbackState.value.copyWith(processingState:AudioProcessingState.error,playing:false));rethrow;}}
+ Future<String> resolve(String id)async{if(cache[id]!=null&&cacheTime[id]!=null&&DateTime.now().difference(cacheTime[id]!)<const Duration(minutes:3))return cache[id]!;final r=await http.post(Uri.parse(playerUrl),headers:{'User-Agent':ua,'Content-Type':'application/json','Origin':'https://music.youtube.com','Referer':'https://music.youtube.com/'},body:jsonEncode({'context':{'client':{'clientName':'WEB_REMIX','clientVersion':clientVersion,'hl':'en','gl':'IN'}},'videoId':id})).timeout(const Duration(seconds:12));if(r.statusCode!=200)throw Exception('Stream request HTTP '+r.statusCode.toString());final j=jsonDecode(r.body);final status=j['playabilityStatus']?['status'];if(status!=null&&status!='OK')throw Exception('Provider: '+status.toString());final fs=(j['streamingData']?['adaptiveFormats'] as List? ??[]).where((x)=>x is Map&&x['url'] is String&&(x['mimeType']??'').toString().startsWith('audio/')).toList();if(fs.isEmpty)throw Exception('No direct audio stream. Provider may require cipher or token.');fs.sort((a,b)=>(a['bitrate']??0).compareTo(b['bitrate']??0));final f=quality==Quality.high?fs.last:quality==Quality.saver?fs.first:fs[fs.length*2~/3];final u=f['url'] as String;cache[id]=u;cacheTime[id]=DateTime.now();return u;}
+ @override Future<void> play()async{if(player.processingState==ProcessingState.idle&&current!=null)await playTrack(index);else await player.play();}
+ @override Future<void> pause()=>player.pause();@override Future<void> stop()async{await player.stop();await super.stop();}@override Future<void> seek(Duration d)=>player.seek(d);
+ @override Future<void> skipToNext()async{if(tracks.isNotEmpty)await playTrack(shuffle?Random().nextInt(tracks.length):(index+1)%tracks.length);}@override Future<void> skipToPrevious()async{if(tracks.isNotEmpty)await playTrack(index==0?tracks.length-1:index-1);}@override Future<void> skipToQueueItem(int i)=>playTrack(i);
+ @override Future<void> setShuffleMode(AudioServiceShuffleMode m)async{shuffle=m==AudioServiceShuffleMode.all;await player.setShuffleModeEnabled(shuffle);}@override Future<void> setRepeatMode(AudioServiceRepeatMode m)async{loop=switch(m){AudioServiceRepeatMode.one=>LoopMode.one,AudioServiceRepeatMode.all=>LoopMode.all,_=>LoopMode.off};await player.setLoopMode(loop);}
 }
-
-class Track {
-  final String title, artist, art;
-  const Track(this.title, this.artist, this.art);
+class Catalog{static final cache=<String,List<Track>>{};static Future<List<Track>> search(String q)async{final k=q.trim().toLowerCase();if(k.isEmpty)return[];if(cache[k]!=null)return cache[k]!;final r=await http.post(Uri.parse(searchUrl),headers:{'User-Agent':ua,'Content-Type':'application/json','Origin':'https://music.youtube.com','Referer':'https://music.youtube.com/'},body:jsonEncode({'context':{'client':{'clientName':'WEB_REMIX','clientVersion':clientVersion,'hl':'en','gl':'IN'}},'query':q})).timeout(const Duration(seconds:10));if(r.statusCode!=200)throw Exception('Search HTTP '+r.statusCode.toString());final out=<String,Track>{};void walk(dynamic n){if(n is Map){final x=n['musicResponsiveListItemRenderer'];if(x is Map){final t=parse(x);if(t!=null)out[t.id]=t;}for(final v in n.values)walk(v);}else if(n is List){for(final v in n)walk(v);}}walk(jsonDecode(r.body));final l=out.values.toList();cache[k]=l;if(cache.length>40)cache.remove(cache.keys.first);return l;}
+ static String deep(dynamic n,String k){if(n is Map){if(n[k] is String&&n[k].toString().isNotEmpty)return n[k];for(final v in n.values){final s=deep(v,k);if(s.isNotEmpty)return s;}}if(n is List){for(final v in n){final s=deep(v,k);if(s.isNotEmpty)return s;}}return'';}
+ static String text(dynamic n){if(n is Map){if(n['text'] is String)return n['text'];if(n['runs'] is List)return(n['runs'] as List).map((x)=>x['text']??'').join();for(final v in n.values){final s=text(v);if(s.isNotEmpty)return s;}}if(n is List){for(final v in n){final s=text(v);if(s.isNotEmpty)return s;}}return'';}
+ static String thumb(dynamic n){if(n is Map){if(n['thumbnails'] is List&&(n['thumbnails'] as List).isNotEmpty)return n['thumbnails'].last['url']??'';for(final v in n.values){final s=thumb(v);if(s.isNotEmpty)return s;}}if(n is List){for(final v in n){final s=thumb(v);if(s.isNotEmpty)return s;}}return'';}
+ static Track? parse(Map r){final id=deep(r,'videoId');if(id.isEmpty)return null;final f=r['flexColumns'] as List? ??[];final title=f.isNotEmpty?text(f[0]):'';final raw=f.length>1?text(f[1]):'';final album=f.length>2?text(f[2]):'YouTube Music';final artist=raw.split('•').map((s)=>s.trim()).firstWhere((s)=>s.isNotEmpty&&s!='Song'&&s!='Video',orElse:()=>raw);final fixed=r['fixedColumns'] as List? ??[];final dur=fixed.isNotEmpty?text(fixed[0]):'';int sec=0;for(final p in dur.split(':'))sec=sec*60+(int.tryParse(p)??0);return Track(id:id,title:title,artist:artist,album:album,art:thumb(r),duration:sec*1000);}
 }
-
-const tracks = [
-  Track('Night Changes', 'One Direction', 'https://i.ytimg.com/vi/syFZfO_wfMQ/hqdefault.jpg'),
-  Track('Heat Waves', 'Glass Animals', 'https://i.ytimg.com/vi/mRD0-GxqHVo/hqdefault.jpg'),
-  Track('The Nights', 'Avicii', 'https://i.ytimg.com/vi/UtF6Jej8yb4/hqdefault.jpg'),
-  Track('Husn', 'Anuv Jain', 'https://i.ytimg.com/vi/g7s2L7G8XcA/hqdefault.jpg'),
-];
-
-class MusicHome extends StatefulWidget {
-  const MusicHome({super.key});
-  @override
-  State<MusicHome> createState() => _MusicHomeState();
+class Lyrics{static Future<String?> fetch(Track t)async{final u=Uri.https('lrclib.net','/api/get',{'artist_name':t.artist,'track_name':t.title,'album_name':t.album,'duration':(t.duration/1000).round().toString()});final r=await http.get(u,headers:{'User-Agent':'FluxMusic/3.2'}).timeout(const Duration(seconds:8));if(r.statusCode!=200)return null;final j=jsonDecode(r.body);return j['syncedLyrics']??j['plainLyrics'];}}
+class App extends StatelessWidget{final SharedPreferences p;final FluxHandler a;const App(this.p,this.a,{super.key});@override Widget build(BuildContext c){final t=ThemeChoice.values[(p.getInt('theme')??1).clamp(0,2)];return MaterialApp(debugShowCheckedModeBanner:false,title:'FluxMusic',theme:ThemeData(colorScheme:ColorScheme.fromSeed(seedColor:accent,brightness:Brightness.light),useMaterial3:true),darkTheme:ThemeData(brightness:Brightness.dark,colorScheme:const ColorScheme.dark(primary:accent,surface:surface),scaffoldBackgroundColor:bg,useMaterial3:true),themeMode:t==ThemeChoice.system?ThemeMode.system:t==ThemeChoice.dark?ThemeMode.dark:ThemeMode.light,home:Home(p,a));}
 }
-
-class _MusicHomeState extends State<MusicHome> {
-  int tab = 0;
-  Track current = tracks[0];
-  bool playing = false;
-  final search = TextEditingController();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
-              child: Row(children: [
-                const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('FLUXMUSIC', style: TextStyle(color: accent, fontWeight: FontWeight.w900, letterSpacing: 2.4, fontSize: 12)),
-                  SizedBox(height: 5),
-                  Text('Good music.\nNo limits.', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, height: 1.1)),
-                ])),
-                IconButton(onPressed: () {}, icon: const Icon(Icons.settings_outlined, size: 25)),
-              ]),
-            )),
-            SliverToBoxAdapter(child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              child: TextField(
-                controller: search,
-                onSubmitted: (q) => setState(() => tab = 1),
-                decoration: InputDecoration(
-                  hintText: 'Search songs, artists, albums',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true, fillColor: surface,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                ),
-              ),
-            )),
-            SliverToBoxAdapter(child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-              child: const Text('Made for you', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-            )),
-            SliverToBoxAdapter(child: SizedBox(height: 190, child: ListView(
-              scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 18),
-              children: [
-                _featureCard('Your daily mix', 'A little of everything', const Color(0xFF6B3A91), Icons.auto_awesome),
-                _featureCard('Fresh releases', 'New music for you', const Color(0xFF9A4A20), Icons.album),
-                _featureCard('Discover', 'Find your next favourite', const Color(0xFF245B55), Icons.explore),
-              ],
-            ))),
-            SliverToBoxAdapter(child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 26, 20, 12),
-              child: Row(children: [const Expanded(child: Text('Quick picks', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold))), TextButton(onPressed: () => setState(() => tab = 1), child: const Text('See all'))]),
-            )),
-            SliverList(delegate: SliverChildBuilderDelegate((context, i) => _trackRow(tracks[i]), childCount: tracks.length)),
-            const SliverToBoxAdapter(child: SizedBox(height: 130)),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _bottomBar(),
-    );
-  }
-
-  Widget _featureCard(String title, String subtitle, Color color, IconData icon) => Container(
-    width: 155, margin: const EdgeInsets.only(right: 12), padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-      Icon(icon, size: 34), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 4), Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.white70)),
-      ]),
-    ]),
-  );
-
-  Widget _trackRow(Track t) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 3),
-    leading: _art(t.art, 54),
-    title: Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-    subtitle: Text(t.artist),
-    trailing: IconButton(icon: const Icon(Icons.more_vert), onPressed: () {}),
-    onTap: () => setState(() { current = t; playing = true; }),
-  );
-
-  Widget _art(String url, double size) => ClipRRect(
-    borderRadius: BorderRadius.circular(10), width: size, height: size,
-    child: Image.network(url, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: surface, child: const Icon(Icons.music_note))),
-  );
-
-  Widget _bottomBar() => Container(
-    decoration: const BoxDecoration(color: bg, border: Border(top: BorderSide(color: Colors.white10))),
-    child: SafeArea(top: false, child: Column(mainAxisSize: MainAxisSize.min, children: [
-      if (current.title.isNotEmpty) InkWell(onTap: () => _openPlayer(), child: Container(
-        height: 64, margin: const EdgeInsets.fromLTRB(10, 8, 10, 4), padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(color: surface, borderRadius: BorderRadius.circular(13)),
-        child: Row(children: [
-          _art(current.art, 44), const SizedBox(width: 10),
-          Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(current.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text(current.artist, style: const TextStyle(color: Colors.white60, fontSize: 12)),
-          ])),
-          IconButton(onPressed: () => setState(() => playing = !playing), icon: Icon(playing ? Icons.pause : Icons.play_arrow)),
-          IconButton(onPressed: () => setState(() => current = tracks[(tracks.indexOf(current) + 1) % tracks.length]), icon: const Icon(Icons.skip_next)),
-        ]),
-      )),
-      NavigationBar(height: 64, backgroundColor: bg, selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
-        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-        NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
-        NavigationDestination(icon: Icon(Icons.library_music_outlined), label: 'Library'),
-      ]),
-    ])),
-  );
-
-  void _openPlayer() => showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: bg, builder: (_) => PlayerSheet(track: current, playing: playing, onToggle: () => setState(() => playing = !playing)));
+class Home extends StatefulWidget{final SharedPreferences p;final FluxHandler a;const Home(this.p,this.a,{super.key});@override State<Home> createState()=>_HomeState();}
+class _HomeState extends State<Home>{int tab=0;final c=TextEditingController();List<Track> results=[],likes=[],recent=[];Map<String,List<Track>> lists={};List<String> searches=[];bool busy=false,offline=false;String error='';Quality q=Quality.balanced;ThemeChoice theme=ThemeChoice.dark;Timer? timer;int timerM=0;
+ @override void initState(){super.initState();likes=read('likes');recent=read('recent');final raw=widget.p.getString('lists');if(raw!=null){final j=jsonDecode(raw) as Map;lists=j.map((k,v)=>MapEntry(k,(v as List).map((e)=>Track.fromJson(e)).toList()));}searches=widget.p.getStringList('searches')??[];q=Quality.values[(widget.p.getInt('quality')??0).clamp(0,2)];theme=ThemeChoice.values[(widget.p.getInt('theme')??1).clamp(0,2)];widget.a.quality=q;}
+ List<Track> read(String k){final s=widget.p.getString(k);return s==null?[]:(jsonDecode(s) as List).map((e)=>Track.fromJson(e)).toList();}
+ Future<void> save()async{await widget.p.setString('likes',jsonEncode(likes.map((e)=>e.toJson()).toList()));await widget.p.setString('recent',jsonEncode(recent.map((e)=>e.toJson()).toList()));await widget.p.setString('lists',jsonEncode(lists.map((k,v)=>MapEntry(k,v.map((e)=>e.toJson()).toList()))));}
+ Future<void> search(String s)async{if(s.trim().isEmpty)return;if(offline){setState(()=>error='Offline mode is enabled.');return;}setState(()=>{busy=true,error='',tab=1});try{results=await Catalog.search(s);searches.remove(s);searches.insert(0,s);if(searches.length>30)searches.removeLast();await widget.p.setStringList('searches',searches);}catch(e){error=e.toString().replaceFirst('Exception: ','');}finally{if(mounted)setState(()=>busy=false);}}
+ Future<void> play(List<Track> l,int i)async{if(l.isEmpty)return;try{await widget.a.playList(l,i);final t=l[i];recent.removeWhere((x)=>x.id==t.id);recent.insert(0,t);if(recent.length>100)recent.removeLast();await save();}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(e.toString().replaceFirst('Exception: ','')),duration:const Duration(seconds:6)));}}
+ void fav(Track t){if(likes.any((x)=>x.id==t.id))likes.removeWhere((x)=>x.id==t.id);else likes.insert(0,t);save();setState((){});}
+ void add(Track t){showModalBottomSheet(context:context,builder:(d)=>ListView(shrinkWrap:true,children:[...lists.keys.map((n)=>ListTile(title:Text(n),onTap:(){lists[n]!.removeWhere((x)=>x.id==t.id);lists[n]!.add(t);save();Navigator.pop(d);setState((){});}),ListTile(leading:const Icon(Icons.add),title:const Text('New playlist'),onTap:()async{Navigator.pop(d);final n=await nameDialog('Playlist name');if(n!=null&&n.isNotEmpty){lists[n]=[t];save();setState((){});}})]));}
+ Future<String?> nameDialog(String title)=>showDialog<String>(context:context,builder:(d){final x=TextEditingController();return AlertDialog(title:Text(title),content:TextField(controller:x,autofocus:true),actions:[TextButton(onPressed:()=>Navigator.pop(d),child:const Text('Cancel')),TextButton(onPressed:()=>Navigator.pop(d,x.text.trim()),child:const Text('Create'))];});
+ void createList()async{final n=await nameDialog('Playlist name');if(n!=null&&n.isNotEmpty&&!lists.containsKey(n)){lists[n]=[];save();setState((){});}}
+ void sleepDialog()=>showDialog(context:context,builder:(d)=>AlertDialog(title:const Text('Sleep timer'),content:Wrap(spacing:8,children:[5,10,15,30,45,60].map((m)=>ActionChip(label:Text(m.toString()+' min'),onPressed:(){timer?.cancel();timerM=m;timer=Timer(Duration(minutes:m),()=>widget.a.pause());Navigator.pop(d);setState((){});})).toList()),actions:[TextButton(onPressed:(){timer?.cancel();timer=null;timerM=0;Navigator.pop(d);setState((){});},child:const Text('Cancel timer'))]));
+ @override void dispose(){c.dispose();timer?.cancel();super.dispose();}
+ @override Widget build(BuildContext x)=>Scaffold(body:SafeArea(child:IndexedStack(index:tab,children:[home(),searchPage(),library(),playlists(),settings()])),bottomNavigationBar:bottom());
+ Widget home()=>CustomScrollView(slivers:[SliverToBoxAdapter(child:Padding(padding:const EdgeInsets.fromLTRB(20,22,20,14),child:Row(children:[const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('FLUXMUSIC',style:TextStyle(color:accent,fontWeight:FontWeight.w900,letterSpacing:2.4,fontSize:12)),SizedBox(height:5),Text('Good music.\nNo limits.',style:TextStyle(fontSize:28,fontWeight:FontWeight.w800,height:1.1))])),IconButton(onPressed:()=>setState(()=>tab=4),icon:const Icon(Icons.settings_outlined))])),SliverToBoxAdapter(child:searchBox()),SliverToBoxAdapter(child:section('Made for you')),SliverToBoxAdapter(child:SizedBox(height:185,child:ListView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:18),children:[feature('Your daily mix','A little of everything',const Color(0xFF6B3A91),Icons.auto_awesome,()=>play(recent.isEmpty?results:recent,0)),feature('Fresh releases','New music for you',const Color(0xFF9A4A20),Icons.album,()=>search('new music')),feature('Discover','Find your next favourite',const Color(0xFF245B55),Icons.explore,()=>setState(()=>tab=1))]))),SliverToBoxAdapter(child:section('Quick picks',action:'Search',tap:()=>setState(()=>tab=1))),SliverList(delegate:SliverChildBuilderDelegate((x,i)=>row(recent[i],recent,onPlay:(n)=>play(recent,n)),childCount:min(8,recent.length))),SliverToBoxAdapter(child:section('Popular searches')),SliverToBoxAdapter(child:Padding(padding:const EdgeInsets.symmetric(horizontal:18),child:Wrap(spacing:8,runSpacing:8,children:['Hindi songs','Arijit Singh','Lo-fi','Trending music','English pop','Anime openings'].map((s)=>ActionChip(label:Text(s),onPressed:()=>search(s))).toList()))),const SliverToBoxAdapter(child:SizedBox(height:120))]);
+ Widget searchPage()=>Column(children:[Padding(padding:const EdgeInsets.fromLTRB(18,18,18,10),child:searchBox()),if(busy)const LinearProgressIndicator(color:accent),if(error.isNotEmpty)Padding(padding:const EdgeInsets.all(14),child:Text(error,style:const TextStyle(color:Colors.redAccent))),Expanded(child:results.isNotEmpty?ListView.builder(itemCount:results.length,itemBuilder:(x,i)=>row(results[i],results,onPlay:(n)=>play(results,n))):ListView(children:[const ListTile(title:Text('Recent searches')),...searches.map((s)=>ListTile(leading:const Icon(Icons.history),title:Text(s),onTap:()=>search(s),trailing:IconButton(icon:const Icon(Icons.close),onPressed:(){searches.remove(s);widget.p.setStringList('searches',searches);setState((){});})),if(searches.isEmpty)const Center(child:Padding(padding:EdgeInsets.all(30),child:Text('Search songs, artists and albums')))]))]);
+ Widget library()=>ListView(padding:const EdgeInsets.all(18),children:[const Text('Your library',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold)),const SizedBox(height:16),lib(Icons.favorite,'Liked Songs',likes.length.toString()+' songs',()=>showTracks('Liked Songs',likes)),lib(Icons.history,'Recently played',recent.length.toString()+' songs',()=>showTracks('Recently played',recent)),lib(Icons.playlist_play,'Your playlists',lists.length.toString()+' playlists',()=>setState(()=>tab=3)),lib(Icons.download_for_offline,'Offline cache','Unavailable for online streams',null)]);
+ Widget playlists()=>ListView(padding:const EdgeInsets.all(18),children:[Row(children:[const Expanded(child:Text('Playlists',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold))),IconButton(onPressed:createList,icon:const Icon(Icons.add))]),...lists.entries.map((e)=>lib(Icons.queue_music,e.key,e.value.length.toString()+' tracks',()=>showTracks(e.key,e.value))),if(lists.isEmpty)const Padding(padding:EdgeInsets.all(24),child:Text('Create a playlist from a track menu.'))]);
+ Widget settings()=>ListView(padding:const EdgeInsets.all(18),children:[const Text('Settings',style:TextStyle(fontSize:28,fontWeight:FontWeight.bold)),const SizedBox(height:14),group('Privacy Center',[SwitchListTile(title:const Text('Offline cache mode'),subtitle:const Text('Disable online searches'),value:offline,onChanged:(v)=>setState(()=>offline=v)),ListTile(title:const Text('Clear search history'),onTap:()async{searches.clear();await widget.p.setStringList('searches',[]);setState((){});}),ListTile(title:const Text('Clear listening history'),onTap:()async{recent.clear();await save();setState((){});}),ListTile(title:const Text('Clear temporary metadata'),onTap:(){Catalog.cache.clear();widget.a.cache.clear();widget.a.cacheTime.clear();})]),group('Appearance',[Wrap(spacing:8,children:ThemeChoice.values.map((t)=>ChoiceChip(label:Text(t.name),selected:theme==t,onSelected:(_){theme=t;widget.p.setInt('theme',t.index);setState((){});})).toList())]),group('Audio & Streaming',[Wrap(spacing:8,children:Quality.values.map((v)=>ChoiceChip(label:Text(v==Quality.balanced?'Balanced':v==Quality.high?'High Fidelity':'Data Saver'),selected:q==v,onSelected:(_){q=v;widget.a.quality=q;widget.p.setInt('quality',q.index);setState((){});})).toList()),ListTile(title:const Text('Sleep timer'),subtitle:Text(timer==null?'Off':timerM.toString()+' minutes'),onTap:sleepDialog),const ListTile(title:Text('Equalizer'),subtitle:Text('Device EQ not connected in Flutter edition'),enabled:false)]),group('About',[const ListTile(title:Text('FluxMusic'),subtitle:Text('CrazeStudio · Flutter edition'))])]);
+ Widget group(String t,List<Widget> kids)=>Card(color:surface,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(t,style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),...kids])));
+ Widget bottom()=>Container(color:bg,child:SafeArea(top:false,child:Column(mainAxisSize:MainAxisSize.min,children:[StreamBuilder<MediaItem?>(stream:widget.a.mediaItem,initialData:widget.a.mediaItem.value,builder:(x,s){final m=s.data;if(m==null)return const SizedBox.shrink();final t=Track.fromJson(m.extras??{'id':m.id,'title':m.title,'artist':m.artist??''});return InkWell(onTap:()=>player(t),child:Container(height:64,margin:const EdgeInsets.fromLTRB(10,8,10,4),padding:const EdgeInsets.symmetric(horizontal:10),decoration:BoxDecoration(color:surface,borderRadius:BorderRadius.circular(13)),child:Row(children:[art(t.art,44),const SizedBox(width:10),Expanded(child:Column(mainAxisAlignment:MainAxisAlignment.center,crossAxisAlignment:CrossAxisAlignment.start,children:[Text(t.title,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w600)),Text(t.artist,style:const TextStyle(color:Colors.white60,fontSize:12))])),StreamBuilder<bool>(stream:widget.a.player.playingStream,initialData:widget.a.player.playing,builder:(x,p)=>IconButton(onPressed:()=>p.data==true?widget.a.pause():widget.a.play(),icon:Icon(p.data==true?Icons.pause:Icons.play_arrow))),IconButton(onPressed:widget.a.skipToNext,icon:const Icon(Icons.skip_next))])));}),NavigationBar(height:64,backgroundColor:bg,selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[NavigationDestination(icon:Icon(Icons.home_outlined),selectedIcon:Icon(Icons.home),label:'Home'),NavigationDestination(icon:Icon(Icons.search),label:'Search'),NavigationDestination(icon:Icon(Icons.library_music_outlined),label:'Library'),NavigationDestination(icon:Icon(Icons.playlist_play),label:'Playlists'),NavigationDestination(icon:Icon(Icons.settings_outlined),label:'Settings')]) ])));
+ Widget searchBox()=>Padding(padding:const EdgeInsets.symmetric(horizontal:18),child:TextField(controller:c,textInputAction:TextInputAction.search,onSubmitted:search,decoration:InputDecoration(hintText:'Search songs, artists, albums',prefixIcon:const Icon(Icons.search),suffixIcon:c.text.isNotEmpty?IconButton(onPressed:(){c.clear();setState((){});},icon:const Icon(Icons.close)):null,filled:true,fillColor:surface,border:OutlineInputBorder(borderRadius:BorderRadius.circular(16),borderSide:BorderSide.none))));
+ Widget section(String t,{String? action,VoidCallback? tap})=>Padding(padding:const EdgeInsets.fromLTRB(20,24,20,12),child:Row(children:[Expanded(child:Text(t,style:const TextStyle(fontSize:21,fontWeight:FontWeight.bold))),if(action!=null)TextButton(onPressed:tap,child:Text(action))]));
+ Widget feature(String t,String sub,Color col,IconData icon,VoidCallback tap)=>InkWell(onTap:tap,child:Container(width:155,margin:const EdgeInsets.only(right:12),padding:const EdgeInsets.all(16),decoration:BoxDecoration(color:col,borderRadius:BorderRadius.circular(20)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Icon(icon,size:34),Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(t,style:const TextStyle(fontSize:17,fontWeight:FontWeight.bold)),Text(sub,style:const TextStyle(fontSize:12,color:Colors.white70))])])));
+ Widget row(Track t,List<Track> l,{required Function(int) onPlay})=>ListTile(contentPadding:const EdgeInsets.symmetric(horizontal:18,vertical:3),leading:art(t.art,54),title:Text(t.title,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.w600)),subtitle:Text(t.artist+' · '+t.time),trailing:PopupMenuButton<String>(onSelected:(v){if(v=='fav')fav(t);if(v=='list')add(t);if(v=='next')widget.a.tracks.insert(widget.a.index+1,t);if(v=='queue')widget.a.tracks.add(t);},itemBuilder:(_)=>const[PopupMenuItem(value:'fav',child:Text('Toggle liked')),PopupMenuItem(value:'list',child:Text('Add to playlist')),PopupMenuItem(value:'next',child:Text('Play next')),PopupMenuItem(value:'queue',child:Text('Add to queue'))]),onTap:()=>onPlay(l.indexOf(t)));
+ Widget art(String u,double s)=>ClipRRect(borderRadius:BorderRadius.circular(10),child:Image.network(u,width:s,height:s,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(width:s,height:s,color:surface,child:const Icon(Icons.music_note))));
+ Widget lib(IconData i,String t,String sub,VoidCallback? f)=>ListTile(leading:Icon(i),title:Text(t),subtitle:Text(sub),onTap:f);
+ void showTracks(String title,List<Track> ts)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>TrackPage(title:title,tracks:ts,onPlay:play,onFav:fav,likes:likes)));
+ void player(Track t)=>showModalBottomSheet(context:context,isScrollControlled:true,backgroundColor:bg,builder:(_)=>Player(track:t,a:widget.a,liked:likes.any((x)=>x.id==t.id),fav:()=>fav(t),lyrics:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>LyricsPage(t)))));
 }
-
-class PlayerSheet extends StatelessWidget {
-  final Track track;
-  final bool playing;
-  final VoidCallback onToggle;
-  const PlayerSheet({super.key, required this.track, required this.playing, required this.onToggle});
-
-  @override
-  Widget build(BuildContext context) => SizedBox(height: MediaQuery.of(context).size.height * .88, child: Padding(
-    padding: const EdgeInsets.all(24), child: Column(children: [
-      Row(children: [IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.keyboard_arrow_down)), const Spacer(), const Text('NOW PLAYING', style: TextStyle(letterSpacing: 2, fontWeight: FontWeight.bold)), const Spacer(), IconButton(onPressed: () {}, icon: const Icon(Icons.more_horiz))]),
-      const Spacer(),
-      ClipRRect(borderRadius: BorderRadius.circular(22), child: Image.network(track.art, width: double.infinity, height: 310, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(height: 310, color: surface, child: const Icon(Icons.music_note, size: 100)))),
-      const SizedBox(height: 30),
-      Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(track.title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)), Text(track.artist, style: const TextStyle(color: Colors.white60, fontSize: 16))])), IconButton(onPressed: () {}, icon: const Icon(Icons.favorite_border, color: accent))]),
-      const SizedBox(height: 24),
-      const LinearProgressIndicator(value: 0, backgroundColor: Colors.white12, color: accent),
-      const Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('0:00'), Text('--:--')]),
-      const SizedBox(height: 18),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [IconButton(onPressed: () {}, icon: const Icon(Icons.shuffle)), IconButton(onPressed: () {}, icon: const Icon(Icons.skip_previous, size: 40)), IconButton(onPressed: onToggle, icon: Icon(playing ? Icons.pause_circle_filled : Icons.play_circle_fill, size: 70, color: accent)), IconButton(onPressed: () {}, icon: const Icon(Icons.skip_next, size: 40)), IconButton(onPressed: () {}, icon: const Icon(Icons.repeat))]),
-      const Spacer(),
-    ]),
-  ));
-}
+class TrackPage extends StatelessWidget{final String title;final List<Track> tracks;final Function(List<Track>,int) onPlay;final Function(Track) onFav;final List<Track> likes;const TrackPage({super.key,required this.title,required this.tracks,required this.onPlay,required this.onFav,required this.likes});@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:Text(title)),body:ListView.builder(itemCount:tracks.length,itemBuilder:(c,i)=>ListTile(leading:Artwork(tracks[i].art,52),title:Text(tracks[i].title),subtitle:Text(tracks[i].artist),onTap:()=>onPlay(tracks,i),trailing:IconButton(icon:Icon(likes.any((t)=>t.id==tracks[i].id)?Icons.favorite:Icons.favorite_border),onPressed:()=>onFav(tracks[i])))));}
+class Artwork extends StatelessWidget{final String url;final double size;const Artwork(this.url,this.size,{super.key});@override Widget build(BuildContext c)=>ClipRRect(borderRadius:BorderRadius.circular(10),child:Image.network(url,width:size,height:size,fit:BoxFit.cover,errorBuilder:(_,__,___)=>Container(width:size,height:size,color:surface,child:const Icon(Icons.music_note))));}
+class Player extends StatelessWidget{final Track track;final FluxHandler a;final bool liked;final VoidCallback fav,lyrics;const Player({super.key,required this.track,required this.a,required this.liked,required this.fav,required this.lyrics});@override Widget build(BuildContext c)=>SizedBox(height:MediaQuery.of(c).size.height*.92,child:Padding(padding:const EdgeInsets.all(24),child:Column(children:[Row(children:[IconButton(onPressed:()=>Navigator.pop(c),icon:const Icon(Icons.keyboard_arrow_down)),const Spacer(),const Text('NOW PLAYING',style:TextStyle(letterSpacing:2,fontWeight:FontWeight.bold)),const Spacer(),IconButton(onPressed:lyrics,icon:const Icon(Icons.lyrics_outlined))]),const Spacer(),Artwork(track.art,MediaQuery.of(c).size.width-48),const SizedBox(height:26),Row(children:[Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(track.title,style:const TextStyle(fontSize:24,fontWeight:FontWeight.bold)),Text(track.artist,style:const TextStyle(color:Colors.white60,fontSize:16))])),IconButton(onPressed:fav,icon:Icon(liked?Icons.favorite:Icons.favorite_border,color:accent))]),const SizedBox(height:18),StreamBuilder<Duration>(stream:a.player.positionStream,initialData:Duration.zero,builder:(c,p)=>StreamBuilder<Duration?>(stream:a.player.durationStream,initialData:a.player.duration,builder:(c,d){final dur=d.data??Duration.zero;return Column(children:[Slider(value:p.data!.inMilliseconds.toDouble().clamp(0,max(1,dur.inMilliseconds)).toDouble(),max:max(1,dur.inMilliseconds).toDouble(),onChanged:(v)=>a.seek(Duration(milliseconds:v.round())),activeColor:accent),Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(fmt(p.data!.inMilliseconds)),Text(fmt(dur.inMilliseconds))])]);})),const SizedBox(height:12),Row(mainAxisAlignment:MainAxisAlignment.spaceEvenly,children:[IconButton(onPressed:()=>a.setShuffleMode(a.shuffle?AudioServiceShuffleMode.none:AudioServiceShuffleMode.all),icon:const Icon(Icons.shuffle)),IconButton(onPressed:a.skipToPrevious,icon:const Icon(Icons.skip_previous,size:40)),StreamBuilder<bool>(stream:a.player.playingStream,initialData:a.player.playing,builder:(c,s)=>IconButton(onPressed:()=>s.data==true?a.pause():a.play(),icon:Icon(s.data==true?Icons.pause_circle_filled:Icons.play_circle_fill,size:72,color:accent))),IconButton(onPressed:a.skipToNext,icon:const Icon(Icons.skip_next,size:40)),IconButton(onPressed:()=>a.setRepeatMode(a.loop==LoopMode.off?AudioServiceRepeatMode.all: a.loop==LoopMode.all?AudioServiceRepeatMode.one:AudioServiceRepeatMode.none),icon:const Icon(Icons.repeat))]),const Spacer(),Row(mainAxisAlignment:MainAxisAlignment.spaceAround,children:[TextButton.icon(onPressed:lyrics,icon:const Icon(Icons.lyrics),label:const Text('Lyrics')),TextButton.icon(onPressed:()=>showModalBottomSheet(context:c,builder:(_)=>ListView(shrinkWrap:true,children:[const ListTile(title:Text('Queue')),...a.tracks.map((t)=>ListTile(title:Text(t.title),subtitle:Text(t.artist),onTap:()=>a.playTrack(a.tracks.indexOf(t))))])),icon:const Icon(Icons.queue_music),label:const Text('Queue'))])])));}
+class LyricsPage extends StatefulWidget{final Track t;const LyricsPage(this.t,{super.key});@override State<LyricsPage> createState()=>_LyricsPageState();}
+class _LyricsPageState extends State<LyricsPage>{String? l;bool loading=true;@override void initState(){super.initState();Lyrics.fetch(widget.t).then((v){if(mounted)setState(()=>{l=v,loading=false});}).catchError((e){if(mounted)setState(()=>loading=false);});}@override Widget build(BuildContext c)=>Scaffold(appBar:AppBar(title:const Text('Lyrics')),body:loading?const Center(child:CircularProgressIndicator()):l==null?const Center(child:Text('Lyrics not found')):SingleChildScrollView(padding:const EdgeInsets.all(24),child:Text(l!,style:const TextStyle(fontSize:18,height:1.7))));}
