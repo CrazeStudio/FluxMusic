@@ -1,0 +1,30 @@
+name: FluxMusic Flutter
+on:
+  push:
+    branches: [rebuild/flutter-root]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Generate Android Gradle project
+        run: flutter create --project-name fluxmusic --org com.crazestudio --platforms android .
+      - name: Dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Tests
+        run: flutter test
+      - name: Build APK
+        run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FluxMusic-Flutter-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
