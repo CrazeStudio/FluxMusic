@@ -1,0 +1,36 @@
+name: Flutter rebuild validation
+on:
+  push:
+    branches: [rebuild/flutter]
+    paths: ['flutter_app/**', '.github/workflows/flutter-build.yml']
+  pull_request:
+    paths: ['flutter_app/**', '.github/workflows/flutter-build.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Generate Android platform scaffolding
+        run: flutter create --project-name fluxmusic --platforms android flutter_app
+      - name: Install dependencies
+        working-directory: flutter_app
+        run: flutter pub get
+      - name: Analyze
+        working-directory: flutter_app
+        run: flutter analyze
+      - name: Test
+        working-directory: flutter_app
+        run: flutter test
+      - name: Build APK
+        working-directory: flutter_app
+        run: flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FluxMusic-Flutter-debug-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 14
